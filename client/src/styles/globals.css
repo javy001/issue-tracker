@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Design language tokens (design doc §9.1). Dark is the default theme (class="dark" on <html>). */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.375rem; /* 6px: buttons, inputs */
+
+  --background: #ffffff;
+  --foreground: #17181b;
+  --sidebar: #f7f7f8;
+  --card: #ffffff;
+  --card-foreground: #17181b;
+  --popover: #ffffff;
+  --popover-foreground: #17181b;
+  --primary: #4a6ee0;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f4;
+  --secondary-foreground: #17181b;
+  --muted: #f1f2f4;
+  --muted-foreground: #575b64;
+  --subtle-foreground: #646872;
+  --accent: #eceef3; /* shadcn "accent" = hover/selected surface */
+  --accent-foreground: #17181b;
+  --destructive: #c2410c;
+  --border: #e4e5e9;
+  --border-strong: #d3d5db;
+  --input: #e4e5e9;
+  --ring: #4a6ee0;
+
+  --ai: #4a6ee0;
+  --ai-soft: rgb(74 110 224 / 0.07);
+  --status-gray: #646872;
+  --status-progress: #b26a00;
+  --status-review: #2f64c8;
+  --status-done: #24804f;
+  --priority-urgent: #c2410c;
+}
+
+.dark {
+  --background: #0e0f11;
+  --foreground: #e7e8ea;
+  --sidebar: #131417;
+  --card: #17181b;
+  --card-foreground: #e7e8ea;
+  --popover: #17181b;
+  --popover-foreground: #e7e8ea;
+  --primary: #4a6ee0;
+  --primary-foreground: #ffffff;
+  --secondary: #1f2025;
+  --secondary-foreground: #e7e8ea;
+  --muted: #1f2025;
+  --muted-foreground: #a0a3ab;
+  --subtle-foreground: #8b8f98;
+  --accent: #23252c;
+  --accent-foreground: #e7e8ea;
+  --destructive: #e8743a;
+  --border: #26282e;
+  --border-strong: #363940;
+  --input: #26282e;
+  --ring: #4a6ee0;
+
+  --ai: #9db2ff;
+  --ai-soft: rgb(74 110 224 / 0.14);
+  --status-gray: #8b8f98;
+  --status-progress: #f2b441;
+  --status-review: #6fa3ff;
+  --status-done: #57c08a;
+  --priority-urgent: #e8743a;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --color-status-gray: var(--status-gray);
+  --color-status-progress: var(--status-progress);
+  --color-status-review: var(--status-review);
+  --color-status-done: var(--status-done);
+  --color-priority-urgent: var(--priority-urgent);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-[13px] leading-[1.45] antialiased;
+  }
+}
