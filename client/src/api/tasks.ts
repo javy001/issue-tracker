@@ -1,6 +1,7 @@
 // Task hooks (§9.5): lists use useInfiniteQuery with cursors (§7.2); edits are optimistic and
 // roll back on error.
 import type {
+  CreateTaskInput,
   FilterQueryInput,
   ListTasksResponse,
   TaskDetailDto,
@@ -106,6 +107,29 @@ export function useUpdateTask(id: string) {
     },
     onSettled: () => {
       // Lists may gain or lose the task (e.g. a status change on the Active page).
+      void qc.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+  });
+}
+
+export function useCreateTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTaskInput) =>
+      apiFetch<TaskDetailDto>('/tasks', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: (task) => {
+      qc.setQueryData(taskKeys.detail(task.id), task);
+      void qc.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+  });
+}
+
+export function useDeleteTask(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<void>(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: taskKeys.detail(id) });
       void qc.invalidateQueries({ queryKey: taskKeys.lists() });
     },
   });

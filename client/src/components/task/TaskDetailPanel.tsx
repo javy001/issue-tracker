@@ -1,33 +1,43 @@
-// Task detail panel (§9.2): properties are editable; edits are optimistic (§9.5).
-import {
-  TASK_STATUSES,
-  type ActivityDto,
-  type TaskDetailDto,
-  type UpdateTaskInput,
-  type UserDto,
-} from '@tracker/shared';
-import { Check, Link2, X } from 'lucide-react';
+// Task detail panel (§9.2): every field is editable; edits are optimistic (§9.5). Delete sits in
+// a ⋯ menu behind a confirmation dialog (v1.6).
+import type { ActivityDto, TaskDetailDto, UpdateTaskInput } from '@tracker/shared';
+import { Check, Link2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError } from '@/api/client.ts';
-import { useLookups, useProducts, useTags, useUsers } from '@/api/reference.ts';
-import { useTask, useUpdateTask } from '@/api/tasks.ts';
-import { PriorityIcon, SparkleIcon, StatusIcon } from '@/components/icons.tsx';
-import { TagChip } from '@/components/TagChip.tsx';
+import { useLookups } from '@/api/reference.ts';
+import { useDeleteTask, useTask, useUpdateTask } from '@/api/tasks.ts';
+import { SparkleIcon } from '@/components/icons.tsx';
 import { Button } from '@/components/ui/button.tsx';
-import { Skeleton } from '@/components/ui/skeleton.tsx';
-import { UserAvatar } from '@/components/UserAvatar.tsx';
 import {
-  formatHours,
-  PRIORITY_LABEL,
-  PRIORITY_ORDER,
-  relativeTime,
-  STATUS_LABEL,
-} from '@/lib/labels.ts';
-import { EstimatePicker } from './EstimatePicker.tsx';
-import { PropertyPicker } from './PropertyPicker.tsx';
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog.tsx';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu.tsx';
+import { Skeleton } from '@/components/ui/skeleton.tsx';
+import { formatHours, PRIORITY_LABEL, relativeTime, STATUS_LABEL } from '@/lib/labels.ts';
+import { EditableDescription, EditableTitle } from './EditableText.tsx';
+import {
+  AssigneePicker,
+  EstimateField,
+  PriorityPicker,
+  ProductPicker,
+  StatusPicker,
+  TagsPicker,
+} from './pickers.tsx';
 
 export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const task = useTask(id);
+  const displayId = id.toUpperCase();
 
   return (
     <aside
@@ -35,8 +45,9 @@ export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => vo
       className="flex min-w-0 flex-[1_1_340px] flex-col gap-4 overflow-y-auto border-l bg-sidebar px-5 pt-3 pb-5 md:h-full md:max-w-[400px]"
     >
       <div className="flex h-7 items-center gap-1.5">
-        <span className="flex-1 font-mono text-xs text-subtle-foreground">{id.toUpperCase()}</span>
+        <span className="flex-1 font-mono text-xs text-subtle-foreground">{displayId}</span>
         <CopyLinkButton />
+        {task.data && <TaskMenu id={task.data.id} onDeleted={onClose} />}
         <Button variant="ghost" size="icon" aria-label="Close details" onClick={onClose}>
           <X />
         </Button>
@@ -45,7 +56,7 @@ export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => vo
       {task.isError && (
         <p role="alert" className="text-muted-foreground">
           {task.error instanceof ApiError && task.error.status === 404
-            ? `Task ${id.toUpperCase()} doesn't exist.`
+            ? `Task ${displayId} doesn't exist.`
             : `Couldn't load this task. ${task.error.message}`}
         </p>
       )}
@@ -57,9 +68,6 @@ export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => vo
 function TaskDetail({ task }: { task: TaskDetailDto }) {
   const update = useUpdateTask(task.id);
   const lookups = useLookups();
-  const users = useUsers().data ?? [];
-  const products = useProducts().data ?? [];
-  const tags = useTags().data ?? [];
   const save = (input: UpdateTaskInput) => update.mutate(input);
 
   const assignee = task.assignee ? lookups.user.get(task.assignee) : undefined;
@@ -67,13 +75,12 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <h2 className="m-0 text-[17px] leading-snug font-semibold">{task.title}</h2>
-        {task.description ? (
-          <p className="m-0 whitespace-pre-wrap text-muted-foreground">{task.description}</p>
-        ) : (
-          <p className="m-0 text-subtle-foreground italic">No description.</p>
-        )}
+      <div className="flex flex-col gap-1.5">
+        <EditableTitle value={task.title} onSave={(title) => save({ title })} />
+        <EditableDescription
+          value={task.description}
+          onSave={(description) => save({ description })}
+        />
       </div>
 
       {update.isError && (
@@ -87,86 +94,23 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
 
       <dl className="m-0 grid grid-cols-[92px_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
         <Property label="Status">
-          <PropertyPicker
-            label={`Status: ${STATUS_LABEL[task.status]}. Change status`}
-            placeholder="Change status…"
-            trigger={
-              <>
-                <StatusIcon status={task.status} />
-                {STATUS_LABEL[task.status]}
-              </>
-            }
-            options={TASK_STATUSES.map((s) => ({
-              value: s,
-              label: STATUS_LABEL[s],
-              icon: <StatusIcon status={s} />,
-            }))}
-            selected={[task.status]}
-            onSelect={(v) => save({ status: v as TaskDetailDto['status'] })}
-          />
+          <StatusPicker value={task.status} onChange={(status) => save({ status })} />
         </Property>
-
         <Property label="Priority">
-          <PropertyPicker
-            label={`Priority: ${PRIORITY_LABEL[task.priority]}. Change priority`}
-            placeholder="Change priority…"
-            trigger={
-              <>
-                <PriorityIcon priority={task.priority} />
-                {PRIORITY_LABEL[task.priority]}
-              </>
-            }
-            options={PRIORITY_ORDER.map((p) => ({
-              value: p,
-              label: PRIORITY_LABEL[p],
-              icon: <PriorityIcon priority={p} />,
-            }))}
-            selected={[task.priority]}
-            onSelect={(v) => save({ priority: v as TaskDetailDto['priority'] })}
-          />
+          <PriorityPicker value={task.priority} onChange={(priority) => save({ priority })} />
         </Property>
-
         <Property label="Assignee">
-          <PropertyPicker
-            label={`Assignee: ${assignee?.name ?? 'unassigned'}. Change assignee`}
-            placeholder="Assign to…"
-            trigger={
-              <>
-                <UserAvatar user={assignee} size={18} />
-                <span className="truncate">{assignee?.name ?? 'Unassigned'}</span>
-              </>
-            }
-            options={[
-              { value: '', label: 'Unassigned', icon: <UserAvatar user={null} size={16} /> },
-              ...users.map((u: UserDto) => ({
-                value: u.handle,
-                label: u.name,
-                hint: u.team ?? undefined,
-                icon: <UserAvatar user={u} size={16} />,
-              })),
-            ]}
-            selected={[task.assignee ?? '']}
-            onSelect={(v) => save({ assignee: v || null })}
-          />
+          <AssigneePicker value={task.assignee} onChange={(a) => save({ assignee: a })} />
         </Property>
-
         <Property label="Estimate">
           <div className="flex min-w-0 items-center gap-2">
-            <EstimatePicker
+            <EstimateField
               value={task.estimateHours}
-              trigger={
-                <span
-                  className={task.estimateHours === null ? 'text-subtle-foreground' : undefined}
-                >
-                  {task.estimateHours === null ? 'Set estimate' : formatHours(task.estimateHours)}
-                </span>
-              }
               onChange={(h) => save({ estimateHours: h })}
             />
             {task.estimateSource === 'ai' && <AiBadge>AI estimate</AiBadge>}
           </div>
         </Property>
-
         <Property label="Team">
           <span
             className={team ? undefined : 'text-subtle-foreground'}
@@ -175,59 +119,11 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
             {team?.name ?? (assignee ? 'No team' : '—')}
           </span>
         </Property>
-
         <Property label="Product">
-          <PropertyPicker
-            label={`Product: ${task.product ?? 'none'}. Change product`}
-            placeholder="Change product…"
-            trigger={
-              <span className={task.product ? undefined : 'text-subtle-foreground'}>
-                {task.product ?? 'No product'}
-              </span>
-            }
-            options={[
-              { value: '', label: 'No product' },
-              ...products.map((p) => ({ value: p.name, label: p.name })),
-            ]}
-            selected={[task.product ?? '']}
-            onSelect={(v) => save({ product: v || null })}
-          />
+          <ProductPicker value={task.product} onChange={(product) => save({ product })} />
         </Property>
-
         <Property label="Tags">
-          <PropertyPicker
-            label={`Tags: ${task.tags.join(', ') || 'none'}. Change tags`}
-            placeholder="Add or remove tags…"
-            multiple
-            trigger={
-              task.tags.length > 0 ? (
-                <span className="flex flex-wrap gap-1">
-                  {task.tags.map((t) => (
-                    <TagChip key={t} name={t} color={lookups.tagColor.get(t)} />
-                  ))}
-                </span>
-              ) : (
-                <span className="text-subtle-foreground">Add tags</span>
-              )
-            }
-            options={tags.map((t) => ({
-              value: t.name,
-              label: t.name,
-              icon: (
-                <span
-                  aria-hidden="true"
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: t.color }}
-                />
-              ),
-            }))}
-            selected={task.tags}
-            onSelect={(v) =>
-              save({
-                tags: task.tags.includes(v) ? task.tags.filter((t) => t !== v) : [...task.tags, v],
-              })
-            }
-          />
+          <TagsPicker value={task.tags} onChange={(tags) => save({ tags })} />
         </Property>
       </dl>
 
@@ -239,6 +135,70 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
           ))}
         </ol>
       </section>
+    </>
+  );
+}
+
+function TaskMenu({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const remove = useDeleteTask(id);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="More actions">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
+            <Trash2 />
+            Delete task…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog
+        open={confirming}
+        onOpenChange={(open) => {
+          setConfirming(open);
+          if (!open) remove.reset();
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {id}?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the task, its tags and its activity. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {remove.isError && (
+            <p role="alert" className="m-0 text-xs text-destructive">
+              Couldn't delete: {remove.error.message}
+            </p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              disabled={remove.isPending}
+              onClick={() =>
+                remove.mutate(undefined, {
+                  onSuccess: () => {
+                    setConfirming(false);
+                    onDeleted();
+                  },
+                })
+              }
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete task'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -267,7 +227,8 @@ function ActivityItem({ entry }: { entry: ActivityDto }) {
     typeof handle === 'string' ? (lookups.user.get(handle)?.name ?? handle) : 'nobody';
   const actor = entry.actor ? (lookups.user.get(entry.actor)?.name ?? entry.actor) : 'Someone';
   const p = entry.payload;
-  const viaAi = p.source === 'ai';
+  const label = <T extends Record<string, string>>(map: T, v: unknown) =>
+    map[v as keyof T] ?? String(v);
 
   let text: string;
   switch (entry.kind) {
@@ -275,10 +236,10 @@ function ActivityItem({ entry }: { entry: ActivityDto }) {
       text = 'created the task';
       break;
     case 'status_changed':
-      text = `changed status from ${STATUS_LABEL[p.from as keyof typeof STATUS_LABEL] ?? p.from} to ${STATUS_LABEL[p.to as keyof typeof STATUS_LABEL] ?? p.to}`;
+      text = `changed status from ${label(STATUS_LABEL, p.from)} to ${label(STATUS_LABEL, p.to)}`;
       break;
     case 'priority_changed':
-      text = `changed priority from ${PRIORITY_LABEL[p.from as keyof typeof PRIORITY_LABEL] ?? p.from} to ${PRIORITY_LABEL[p.to as keyof typeof PRIORITY_LABEL] ?? p.to}`;
+      text = `changed priority from ${label(PRIORITY_LABEL, p.from)} to ${label(PRIORITY_LABEL, p.to)}`;
       break;
     case 'assigned':
       text = p.to ? `assigned ${name(p.to)}` : `unassigned ${name(p.from)}`;
@@ -301,7 +262,7 @@ function ActivityItem({ entry }: { entry: ActivityDto }) {
       <span aria-hidden="true" className="mt-1.5 size-1.5 shrink-0 rounded-full bg-border-strong" />
       <span className="flex-1">
         <span className="font-medium text-foreground">{actor}</span> {text}
-        {viaAi && (
+        {p.source === 'ai' && (
           <span className="ml-1.5 inline-flex align-middle">
             <AiBadge>AI suggested</AiBadge>
           </span>

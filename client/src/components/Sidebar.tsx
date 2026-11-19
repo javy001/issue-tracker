@@ -1,17 +1,20 @@
-import { CircleUser, Inbox } from 'lucide-react';
+import { CircleUser, Inbox, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useHealth } from '@/api/health.ts';
 import { useMe, useTeams } from '@/api/reference.ts';
 import { cn } from '@/lib/utils.ts';
+import { useNewTask } from './task/NewTaskDialog.tsx';
+import { Button } from './ui/button.tsx';
 import { UserAvatar } from './UserAvatar.tsx';
 
 // §9.2 v1.4: My issues, Triage, Teams (Active / Backlog), current-user footer.
-// Search, new task and saved views are added with their features.
+// Search and saved views are added with their features.
 export function Sidebar() {
   const me = useMe().data;
   const teams = useTeams().data ?? [];
   const health = useHealth();
+  const { openNewTask } = useNewTask();
 
   return (
     <nav
@@ -22,7 +25,10 @@ export function Sidebar() {
         <span className="inline-flex size-5 items-center justify-center rounded-[5px] bg-primary text-[11px] text-primary-foreground">
           N
         </span>
-        Northwind
+        <span className="flex-1">Northwind</span>
+        <Button variant="outline" size="icon" aria-label="New task" onClick={openNewTask}>
+          <Plus />
+        </Button>
       </div>
 
       <div className="flex flex-col gap-px">

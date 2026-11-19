@@ -1,10 +1,11 @@
 // Estimate in hours (§5: 0.5 h steps, 0.5–80 h): quick picks plus a validated custom value.
 import { ESTIMATE_HOURS, estimateHoursSchema } from '@tracker/shared';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.tsx';
 import { cn } from '@/lib/utils.ts';
+import { pickerTriggerClass, type PickerVariant } from './PropertyPicker.tsx';
 
 const QUICK = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 40];
 
@@ -12,11 +13,15 @@ export function EstimatePicker({
   value,
   trigger,
   onChange,
+  variant,
 }: {
   value: number | null;
   trigger: ReactNode;
   onChange: (hours: number | null) => void;
+  variant?: PickerVariant;
 }) {
+  const inputId = useId();
+  const errorId = useId();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +32,8 @@ export function EstimatePicker({
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // React bubbles events through portals: don't submit an enclosing form (New task dialog).
+    e.stopPropagation();
     const parsed = estimateHoursSchema.safeParse(Number(draft));
     if (!draft.trim() || !parsed.success) {
       setError(
@@ -50,7 +57,7 @@ export function EstimatePicker({
         <button
           type="button"
           aria-label={`Estimate: ${value === null ? 'none' : `${value} hours`}. Change estimate`}
-          className="-ml-2 inline-flex h-7 items-center gap-2 rounded-md px-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          className={pickerTriggerClass(variant)}
         >
           {trigger}
         </button>
@@ -72,15 +79,12 @@ export function EstimatePicker({
             ))}
           </div>
           <form onSubmit={submit} className="flex flex-col gap-1.5">
-            <label
-              htmlFor="estimate-custom"
-              className="text-[11px] font-medium text-subtle-foreground"
-            >
+            <label htmlFor={inputId} className="text-[11px] font-medium text-subtle-foreground">
               Custom (hours)
             </label>
             <div className="flex gap-1.5">
               <Input
-                id="estimate-custom"
+                id={inputId}
                 inputMode="decimal"
                 value={draft}
                 onChange={(e) => {
@@ -88,7 +92,7 @@ export function EstimatePicker({
                   setError(null);
                 }}
                 aria-invalid={!!error}
-                aria-describedby={error ? 'estimate-error' : undefined}
+                aria-describedby={error ? errorId : undefined}
                 className="h-7 text-[13px]"
               />
               <Button type="submit" size="default">
@@ -96,7 +100,7 @@ export function EstimatePicker({
               </Button>
             </div>
             {error && (
-              <p id="estimate-error" role="alert" className="text-[11px] text-destructive">
+              <p id={errorId} role="alert" className="text-[11px] text-destructive">
                 {error}
               </p>
             )}

@@ -20,6 +20,7 @@
 | 1.3     | 2026-11-19 | Tasks no longer belong to a team: team is derived from the assignee; one team per user. Global task IDs `TSK-<n>` (replaces per-team numbers and `teams.next_task_number`). Filter AST approved with per-field operators. API responses use stable identifiers; list responses add `total`. AI assignee candidates come from the task's product. |
 | 1.4     | 2026-11-19 | Task screen: open task in `?task=` on the current list (no `/task/:id` route); Inbox removed; Triage is a top-level, workspace-wide page; team pages have Active / Backlog with defined filters; routes approved.                                                                                                                                |
 | 1.5     | 2026-11-19 | Approved the `cn` package (shadcn-ui) used by generated shadcn components; it replaces clsx + tailwind-merge.                                                                                                                                                                                                                                    |
+| 1.6     | 2026-11-19 | Task create/edit/delete UI: New task dialog prefilled from the current page, inline title/description editing, delete behind a confirmation dialog.                                                                                                                                                                                              |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -462,6 +463,10 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 - **Below the header:** the natural-language filter bar with parsed condition chips, Clear, and Save as view. Then a count row.
 - **List view:** priority, ID, status, title, tags, AI hint, estimate, assignee.
 - **Board view:** columns by status, cards with ID, title, priority, tags, estimate and assignee.
+- **Creating, editing and deleting tasks (v1.6):**
+  - **New task** opens a shadcn Dialog with title, description and the same property pickers as the detail panel. Fields are prefilled from the current page: My issues → assigned to me, status Todo; Triage → unassigned; team Active → status Todo, assigned to me if I'm in that team; team Backlog → status Backlog, assigned to me if I'm in that team. After creating, the new task opens in the detail panel.
+  - **Title and description** are edited inline in the detail panel: click to edit; the title saves on Enter or blur, the description on ⌘/Ctrl+Enter or blur; Esc cancels.
+  - **Delete** is in a ⋯ menu in the detail panel and asks for confirmation in a dialog ("Delete TSK-142? This can't be undone."), since deletes are permanent (§5).
 
 ### 9.3 Routes (approved v1.4)
 
@@ -540,6 +545,7 @@ npm run dev -- --user=dana    # act as another seeded user
 | Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)        |
 | Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7           |
 | Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5 |
+| Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)      |
 
 ---
 

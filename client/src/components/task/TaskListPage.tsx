@@ -1,7 +1,10 @@
 // A list page (§9.2): header, count row, task list, and the detail panel for `?task=` (§9.3).
 import type { FilterQueryInput } from '@tracker/shared';
+import { Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { useTaskList } from '@/api/tasks.ts';
+import { Button } from '@/components/ui/button.tsx';
+import { usePageTaskDefaults, useNewTask, type NewTaskDefaults } from './NewTaskDialog.tsx';
 import { TaskDetailPanel } from './TaskDetailPanel.tsx';
 import { TaskList } from './TaskList.tsx';
 
@@ -9,11 +12,16 @@ export function TaskListPage({
   crumbs,
   filter,
   emptyText,
+  newTaskDefaults,
 }: {
   crumbs: string[];
   filter: FilterQueryInput;
   emptyText: string;
+  /** §9.2 v1.6: prefill for tasks created from this page. */
+  newTaskDefaults: NewTaskDefaults;
 }) {
+  usePageTaskDefaults(newTaskDefaults);
+  const { openNewTask } = useNewTask();
   const [params, setParams] = useSearchParams();
   const openTask = params.get('task');
   const query = useTaskList(filter);
@@ -46,6 +54,11 @@ export function TaskListPage({
               )}
             </span>
           ))}
+          <span className="flex-1" />
+          <Button size="default" onClick={openNewTask}>
+            <Plus />
+            New task
+          </Button>
         </header>
         <div
           className="flex h-8 items-center border-b px-4 text-xs text-subtle-foreground"

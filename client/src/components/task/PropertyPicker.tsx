@@ -29,6 +29,17 @@ interface Props {
   onSelect: (value: string) => void;
   multiple?: boolean;
   disabled?: boolean;
+  variant?: PickerVariant;
+}
+
+/** `inline`: borderless, for the detail panel. `chip`: bordered, for forms (New task dialog). */
+export type PickerVariant = 'inline' | 'chip';
+
+export function pickerTriggerClass(variant: PickerVariant = 'inline') {
+  return cn(
+    'inline-flex h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+    variant === 'inline' ? '-ml-2' : 'border bg-background text-xs',
+  );
 }
 
 export function PropertyPicker({
@@ -40,6 +51,7 @@ export function PropertyPicker({
   onSelect,
   multiple,
   disabled,
+  variant,
 }: Props) {
   const [open, setOpen] = useState(false);
   return (
@@ -49,7 +61,7 @@ export function PropertyPicker({
           type="button"
           aria-label={label}
           disabled={disabled}
-          className="-ml-2 inline-flex h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className={pickerTriggerClass(variant)}
         >
           {trigger}
         </button>
