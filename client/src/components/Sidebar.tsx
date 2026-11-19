@@ -1,18 +1,19 @@
-import { CircleUser, Inbox, Plus } from 'lucide-react';
+import { CircleUser, Inbox, ListFilter, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useHealth } from '@/api/health.ts';
 import { useMe, useTeams } from '@/api/reference.ts';
+import { useViews } from '@/api/views.ts';
 import { cn } from '@/lib/utils.ts';
 import { useNewTask } from './task/NewTaskDialog.tsx';
 import { Button } from './ui/button.tsx';
 import { UserAvatar } from './UserAvatar.tsx';
 
-// §9.2 v1.4: My issues, Triage, Teams (Active / Backlog), current-user footer.
-// Search and saved views are added with their features.
+// §9.2 v1.4/v1.8: My issues, Triage, Teams (Active / Backlog), Saved views, current-user footer.
 export function Sidebar() {
   const me = useMe().data;
   const teams = useTeams().data ?? [];
+  const views = useViews();
   const health = useHealth();
   const { openNewTask } = useNewTask();
 
@@ -61,6 +62,21 @@ export function Sidebar() {
               Backlog
             </SidebarLink>
           </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-px">
+        <div className="px-2 pb-1 text-[11px] font-medium text-subtle-foreground">Saved views</div>
+        {views.isError && (
+          <p className="m-0 px-2 text-xs text-muted-foreground">Couldn't load views.</p>
+        )}
+        {views.data?.length === 0 && (
+          <p className="m-0 px-2 text-xs text-subtle-foreground">Use “Save as view” on any list.</p>
+        )}
+        {views.data?.map((v) => (
+          <SidebarLink key={v.id} to={`/views/${v.id}`} icon={<ListFilter className="size-3.5" />}>
+            <span className="truncate">{v.name}</span>
+          </SidebarLink>
         ))}
       </div>
 

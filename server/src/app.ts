@@ -5,6 +5,7 @@ import { currentUserMiddleware, type CurrentUser } from './middleware/current-us
 import { errorHandler, notFoundHandler } from './middleware/error-handler.ts';
 import { referenceRouter } from './routes/reference.ts';
 import { tasksRouter } from './routes/tasks.ts';
+import { viewsRouter } from './routes/views.ts';
 
 export interface AppDeps {
   db: Db;
@@ -25,6 +26,7 @@ export function createApp({ db, currentUser }: AppDeps) {
   app.use('/api', currentUserMiddleware(currentUser));
   app.use('/api', referenceRouter(db));
   app.use('/api/tasks', tasksRouter(db));
+  app.use('/api/views', viewsRouter(db));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

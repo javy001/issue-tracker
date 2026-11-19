@@ -1,5 +1,6 @@
 // API contracts (design doc §7). Related records are referenced by stable identifiers (v1.3).
 import { z } from 'zod';
+import { filterQuerySchema, type FilterQuery } from './filter.ts';
 import {
   ESTIMATE_SOURCES,
   estimateHoursSchema,
@@ -122,3 +123,35 @@ export const updateTaskSchema = z
     message: 'Provide at least one field to update',
   });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+// ---------- saved views (§6.2 v1.8) ----------
+export const viewDisplaySchema = z.strictObject({
+  layout: z.enum(['list', 'board']).default('list'),
+});
+export type ViewDisplay = z.infer<typeof viewDisplaySchema>;
+
+export interface SavedViewDto {
+  id: string;
+  name: string;
+  filter: FilterQuery;
+  display: ViewDisplay;
+  createdAt: string;
+}
+
+const viewName = z.string().trim().min(1, 'Name is required').max(80);
+
+export const createViewSchema = z.strictObject({
+  name: viewName,
+  filter: filterQuerySchema,
+  display: viewDisplaySchema.default({ layout: 'list' }),
+});
+export type CreateViewInput = z.input<typeof createViewSchema>;
+
+export const updateViewSchema = z
+  .strictObject({
+    name: viewName.optional(),
+    filter: filterQuerySchema.optional(),
+    display: viewDisplaySchema.optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update' });
+export type UpdateViewInput = z.input<typeof updateViewSchema>;

@@ -22,6 +22,7 @@
 | 1.5     | 2026-11-19 | Approved the `cn` package (shadcn-ui) used by generated shadcn components; it replaces clsx + tailwind-merge.                                                                                                                                                                                                                                    |
 | 1.6     | 2026-11-19 | Task create/edit/delete UI: New task dialog prefilled from the current page, inline title/description editing, delete behind a confirmation dialog.                                                                                                                                                                                              |
 | 1.7     | 2026-11-19 | Board view: columns are the statuses the page allows, drag changes status only (no manual order), List/Board stored as `?layout=board`.                                                                                                                                                                                                          |
+| 1.8     | 2026-11-19 | Filter bar: manual chips always available (also after AI), text box searches until the AI step, page base filters hidden, state in `?q=`. Saved views: save/edit/rename/delete, sort saved with views, `SavedViewDto` API. "All views" removed from the sidebar.                                                                                 |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -300,6 +301,24 @@ interface FilterQuery {
 A saved view stores the `FilterQuery` plus display options (`list`/`board`, density). Saved views are personal (owned by the current user).
 **Decided:** personal only for v1 (no team-shared views).
 
+**Behavior (v1.8):**
+
+- **Save as view** works from any page and asks for a name. The saved `FilterQuery` is the page's base conditions plus your chips, search text and sort, so the view reproduces exactly what you saw; `display` stores the layout (`{ layout: 'list' | 'board' }`).
+- Views are listed in the sidebar's Saved views section. Opening one (`/views/:viewId`) shows all its conditions as editable chips (a view has no hidden base). Changes are kept in the URL until you choose **Save changes**; **Rename** and **Delete** (with confirmation) are in a ⋯ menu.
+- A **Sort** menu (priority, updated, created, estimate; ascending or descending) is part of the filter state and is saved with views.
+- The API validates stored filters with the shared `filterQuerySchema`; another user's view returns 404.
+
+```ts
+interface SavedViewDto {
+  id: string;
+  name: string;
+  filter: FilterQuery;
+  display: { layout: 'list' | 'board' };
+  createdAt: string;
+}
+// POST /api/views { name, filter, display } · PATCH /api/views/:id { name?, filter?, display? } · DELETE → 204
+```
+
 ### 6.3 Text search
 
 **Decided:** Postgres full-text search: a generated `tsvector` column on title (weight A) + description (weight B) with a GIN index, queried with `websearch_to_tsquery` and ranked by `ts_rank` when a search term is present. A query that looks like a display ID (`TSK-142`) also matches that task exactly.
@@ -450,7 +469,7 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 ### 9.2 Layout
 
 - **Three panes:** sidebar (~220 px) | main (list or board) | task detail panel (~340 px, closable). Panes stack on narrow screens.
-- **Sidebar (v1.4):** workspace, search, new task, My issues, Triage, All views, Teams (each with Active / Backlog), Saved views, and a current-user footer showing `--user=<handle>`. Inbox is removed (notifications are out of scope, §2.3).
+- **Sidebar (v1.4, v1.8):** workspace, search, new task, My issues, Triage, Teams (each with Active / Backlog), Saved views, and a current-user footer showing `--user=<handle>`. Inbox is removed (notifications are out of scope, §2.3). "All views" is removed (v1.8): the Saved views section lists every view.
 - **List presets (v1.4):**
 
   | Page                    | Filter                                                         |
@@ -462,6 +481,12 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 
 - **Main header:** breadcrumb, List/Board toggle, Display options, ⌘K trigger, and New task (`C`).
 - **Below the header:** the natural-language filter bar with parsed condition chips, Clear, and Save as view. Then a count row.
+- **Filter bar (v1.8):**
+  - **Manual filters are always available**, including after the AI filter ships. A **Filter** button opens a field menu (Status, Priority, Assignee, Team, Product, Tag, Estimate, Created, Updated) and then a value picker, and adds a chip such as "Tag is any of bug, perf". Click a chip to change its operator or values; × removes it.
+  - **Text box:** full-text search (§6.3) until the AI step. After it, Enter interprets the text as a plain-English filter and turns it into chips; text that isn't a filter still searches.
+  - **Page filters:** a page's own conditions (e.g. Engineering › Active) stay fixed and are not shown; your chips narrow them further (AND).
+  - **URL state:** your chips, search and sort are stored in `?q=` (URL-encoded JSON of the `FilterQuery` parts), next to `?task=` and `?layout=`.
+  - **Clear** removes your chips and search; **Save as view** is described in §6.2.
 - **List view:** priority, ID, status, title, tags, AI hint, estimate, assignee.
 - **Board view:** columns by status, cards with ID, title, priority, tags, estimate and assignee.
   - **Columns (v1.7):** the statuses the page's filter allows, in workflow order (e.g. team Active: Todo, In Progress, In Review; My issues: Backlog → In Review). Each column loads its own pages from `GET /api/tasks` (§7.2) and shows its total.
@@ -541,16 +566,17 @@ npm run dev -- --user=dana    # act as another seeded user
 
 ## 13. Feature log
 
-| Feature                                                                                                  | Status              | Spec / sections   |
-| -------------------------------------------------------------------------------------------------------- | ------------------- | ----------------- |
-| Design language mockup                                                                                   | Approved 2026-11-19 | §9.1, §9.2        |
-| Workspace scaffold                                                                                       | Done 2026-11-19     | §3, §4, §10       |
-| Data model, migration, seed                                                                              | Done 2026-11-19     | §5, §6.3, §10     |
-| Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)         |
-| Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7            |
-| Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5  |
-| Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)       |
-| Board view with drag and drop, List/Board toggle                                                         | Done 2026-11-19     | §9.2, §9.3 (v1.7) |
+| Feature                                                                                                  | Status              | Spec / sections         |
+| -------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------- |
+| Design language mockup                                                                                   | Approved 2026-11-19 | §9.1, §9.2              |
+| Workspace scaffold                                                                                       | Done 2026-11-19     | §3, §4, §10             |
+| Data model, migration, seed                                                                              | Done 2026-11-19     | §5, §6.3, §10           |
+| Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)               |
+| Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7                  |
+| Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5        |
+| Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)             |
+| Board view with drag and drop, List/Board toggle                                                         | Done 2026-11-19     | §9.2, §9.3 (v1.7)       |
+| Filter bar (chips, search, sort) and saved views (API + UI)                                              | Done 2026-11-19     | §6.2, §7.1, §9.2 (v1.8) |
 
 ---
 

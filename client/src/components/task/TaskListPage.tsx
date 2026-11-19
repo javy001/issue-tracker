@@ -1,35 +1,70 @@
-// A list page (§9.2): header with List/Board toggle, count row, the list or board, and the
-// detail panel for `?task=` (§9.3). The layout is `?layout=board` (v1.7).
+// A list page (§9.2): header with List/Board toggle, filter bar, count row, the list or board,
+// and the detail panel for `?task=` (§9.3). Layout is `?layout=` (v1.7); the user's filter is
+// `?q=` on top of the page's hidden base filter (v1.8).
 import type { FilterQueryInput } from '@tracker/shared';
 import { Columns3, List, Plus } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTaskList } from '@/api/tasks.ts';
+import { FilterBar } from '@/components/filters/FilterBar.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { allowedStatuses } from '@/lib/board.ts';
+import {
+  EMPTY_FILTER,
+  mergeFilters,
+  sortText,
+  useUserFilter,
+  type UserFilter,
+} from '@/lib/filters.ts';
 import { cn } from '@/lib/utils.ts';
 import { usePageTaskDefaults, useNewTask, type NewTaskDefaults } from './NewTaskDialog.tsx';
 import { TaskBoard } from './TaskBoard.tsx';
 import { TaskDetailPanel } from './TaskDetailPanel.tsx';
 import { TaskList } from './TaskList.tsx';
 
+export type Layout = 'list' | 'board';
+
+export interface PageState {
+  userFilter: UserFilter;
+  /** True when `?q=` differs from the page default (a saved view's filter). */
+  filterChanged: boolean;
+  layout: Layout;
+  layoutChanged: boolean;
+}
+
 export function TaskListPage({
   crumbs,
-  filter,
+  baseFilter,
   emptyText,
   newTaskDefaults,
+  defaultUserFilter = EMPTY_FILTER,
+  defaultLayout = 'list',
+  headerActions,
+  canSaveView = true,
 }: {
   crumbs: string[];
-  filter: FilterQueryInput;
+  /** The page's own conditions: fixed and not shown as chips (§9.2 v1.8). */
+  baseFilter: FilterQueryInput;
   emptyText: string;
   /** §9.2 v1.6: prefill for tasks created from this page. */
   newTaskDefaults: NewTaskDefaults;
+  /** Initial chips/search/sort when the URL has no `?q=` (saved views). */
+  defaultUserFilter?: UserFilter;
+  defaultLayout?: Layout;
+  headerActions?: (state: PageState) => ReactNode;
+  canSaveView?: boolean;
 }) {
   usePageTaskDefaults(newTaskDefaults);
   const { openNewTask } = useNewTask();
   const [params, setParams] = useSearchParams();
+  const user = useUserFilter(defaultUserFilter);
   const openTask = params.get('task');
-  const isBoard = params.get('layout') === 'board';
+  const layoutParam = params.get('layout');
+  const layout: Layout =
+    layoutParam === 'board' || layoutParam === 'list' ? layoutParam : defaultLayout;
+  const isBoard = layout === 'board';
+
+  const filter = useMemo(() => mergeFilters(baseFilter, user.value), [baseFilter, user.value]);
   const statuses = useMemo(() => allowedStatuses(filter), [filter]);
 
   // The list query only runs in list layout; the board loads per column.
@@ -37,10 +72,20 @@ export function TaskListPage({
   const total = query.data?.pages[0]?.total;
 
   const setParam = (key: string, value: string | null) => {
-    const next = new URLSearchParams(params);
-    if (value === null) next.delete(key);
-    else next.set(key, value);
-    setParams(next);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+      return next;
+    });
+  };
+  const setLayout = (l: Layout) => setParam('layout', l === defaultLayout ? null : l);
+
+  const state: PageState = {
+    userFilter: user.value,
+    filterChanged: user.overridden,
+    layout,
+    layoutChanged: layout !== defaultLayout,
   };
 
   return (
@@ -65,23 +110,16 @@ export function TaskListPage({
             </span>
           ))}
           <span className="flex-1" />
+          {headerActions?.(state)}
           <div
             role="group"
             aria-label="Layout"
-            className="mr-1.5 inline-flex gap-0.5 rounded-[7px] border bg-sidebar p-0.5"
+            className="mx-1.5 inline-flex gap-0.5 rounded-[7px] border bg-sidebar p-0.5"
           >
-            <LayoutButton
-              active={!isBoard}
-              onClick={() => setParam('layout', null)}
-              icon={<List />}
-            >
+            <LayoutButton active={!isBoard} onClick={() => setLayout('list')} icon={<List />}>
               List
             </LayoutButton>
-            <LayoutButton
-              active={isBoard}
-              onClick={() => setParam('layout', 'board')}
-              icon={<Columns3 />}
-            >
+            <LayoutButton active={isBoard} onClick={() => setLayout('board')} icon={<Columns3 />}>
               Board
             </LayoutButton>
           </div>
@@ -90,6 +128,13 @@ export function TaskListPage({
             New task
           </Button>
         </header>
+        <FilterBar
+          value={user.value}
+          onChange={user.set}
+          effectiveFilter={filter}
+          layout={layout}
+          canSaveView={canSaveView}
+        />
         <div
           className="flex h-8 items-center border-b px-4 text-xs text-subtle-foreground"
           aria-live="polite"
@@ -100,13 +145,24 @@ export function TaskListPage({
               ? ' '
               : `${total} ${total === 1 ? 'task' : 'tasks'}`}
           <span className="flex-1" />
-          Sorted by priority
+          {sortText(user.value)}
         </div>
         {isBoard ? (
-          <TaskBoard filter={filter} statuses={statuses} />
+          statuses.length > 0 ? (
+            <TaskBoard filter={filter} statuses={statuses} />
+          ) : (
+            <p className="m-0 p-4 text-muted-foreground">These filters exclude every status.</p>
+          )
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <TaskList query={query} emptyText={emptyText} />
+            <TaskList
+              query={query}
+              emptyText={
+                user.value.conditions.length || user.value.search
+                  ? 'No tasks match these filters.'
+                  : emptyText
+              }
+            />
           </div>
         )}
       </section>
@@ -125,8 +181,8 @@ function LayoutButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
