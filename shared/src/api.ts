@@ -162,3 +162,15 @@ export const updateViewSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update' });
 export type UpdateViewInput = z.input<typeof updateViewSchema>;
+
+// ---------- AI (§8) ----------
+export const parseFilterRequestSchema = z.strictObject({
+  text: z.string().trim().min(1, 'Type what you want to see').max(300),
+});
+export type ParseFilterRequest = z.infer<typeof parseFilterRequestSchema>;
+
+export interface ParseFilterResponse {
+  filter: FilterQuery;
+  /** One short sentence describing what Claude understood (§8.1). */
+  interpretation: string;
+}

@@ -25,6 +25,7 @@
 | 1.8     | 2026-11-19 | Filter bar: manual chips always available (also after AI), text box searches until the AI step, page base filters hidden, state in `?q=`. Saved views: save/edit/rename/delete, sort saved with views, `SavedViewDto` API. "All views" removed from the sidebar.                                                                                 |
 | 1.9     | 2026-11-19 | Keyboard: J/K move a focus highlight; S/P/A/E/L act on the highlighted row, else the open task; their choices appear in the ⌘K palette. Palette: actions, navigation, task search.                                                                                                                                                               |
 | 1.10    | 2026-11-19 | Search: a bare number, `#n` or `TSK-n` matches that task exactly and is shown first when sorted by relevance.                                                                                                                                                                                                                                    |
+| 1.11    | 2026-11-19 | AI natural-language filter: Enter or ✨ in the search box, result replaces chips/search/sort, flat structured-output schema converted and validated server-side, prompt caching. AI features built one per step: filter, estimate, assignee.                                                                                                     |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -415,6 +416,14 @@ All AI calls live in `server/src/ai/` and use `@anthropic-ai/sdk`. The browser n
 
 Input: free text, plus reference data and today's date. Output: `FilterQuery` (§6.1) and a short `interpretation` string. The UI shows the parsed conditions as editable chips ("Understood as …"), so the user can see and correct what the AI understood. The result can be saved as a view.
 
+**Details (v1.11):**
+
+- **Trigger:** in the filter bar's text box, typing still searches live (§6.3). `Enter` or the ✨ button sends the text to `POST /api/ai/parse-filter` `{ text }` → `{ filter: FilterQuery, interpretation: string }`.
+- **Result replaces** your chips, search and sort (the page's hidden base filter still applies). The chips stay fully editable; an "✨ Understood as …" line shows the interpretation until you change the filter or dismiss it.
+- **No filter found:** if Claude returns no conditions and no sort, the text stays a plain search and the line says so.
+- **Model output shape:** structured outputs can't express the AST's tuples or numeric limits, so Claude fills a flat schema (`field`, `op`, `values[]`, `numbers[]`, `dates[]` per condition; `values` limited to the known identifiers). The server converts it to `FilterQuery`, validates it with `filterQuerySchema`, and checks identifiers like any filter; anything invalid → `AI_UNAVAILABLE`.
+- **Prompt:** a stable system prompt (field semantics, operators, reference data, `me` = current user) with automatic prompt caching; today's date goes in the user message so the cached prefix stays stable.
+
 ### 8.2 Effort estimation
 
 Input: the task's title, description, tags and product, plus a sample of similar completed tasks with their estimates (picked by the same product and tags and a text-search match). Output: `{ estimateHours: number, rationale, similarTaskIds[] }` (validated against the allowed range and step). Accepting it sets `estimate_source = 'ai'`. Triggered on demand (a button) and shown automatically for unestimated tasks in the detail panel.
@@ -588,6 +597,7 @@ npm run dev -- --user=dana    # act as another seeded user
 | Board view with drag and drop, List/Board toggle                                                         | Done 2026-11-19     | §9.2, §9.3 (v1.7)       |
 | Filter bar (chips, search, sort) and saved views (API + UI)                                              | Done 2026-11-19     | §6.2, §7.1, §9.2 (v1.8) |
 | ⌘K command palette and keyboard shortcuts                                                                | Done 2026-11-19     | §9.4 (v1.9)             |
+| AI: natural-language filtering (shared Claude client, `/api/ai/parse-filter`, filter bar ✨)             | Done 2026-11-19     | §8.0, §8.1 (v1.11)      |
 
 ---
 

@@ -1,3 +1,4 @@
+import { createAnthropicLLM } from './ai/llm.ts';
 import { createApp } from './app.ts';
 import { config } from './config.ts';
 import { createDb } from './db/client.ts';
@@ -19,7 +20,11 @@ try {
   process.exit(1);
 }
 
-const app = createApp({ db, currentUser });
+const app = createApp({
+  db,
+  currentUser,
+  llm: createAnthropicLLM({ model: config.ANTHROPIC_MODEL }),
+});
 
 const server = app.listen(config.PORT, () => {
   console.log(

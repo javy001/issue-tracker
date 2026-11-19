@@ -42,3 +42,5 @@ npm run db:reset               # drop everything, migrate, seed (local databases
 Tests recreate the test database from the committed migrations before each run (`server/src/test/global-setup.ts`).
 
 TypeScript is pinned to 6.0.x because typescript-eslint does not support TypeScript 7 yet.
+
+AI features (§8) call Claude from the server with whatever credentials the Anthropic SDK finds: `ANTHROPIC_API_KEY`, or an `ant auth login` profile. Without credentials the app still works and AI requests return `AI_UNAVAILABLE`. Tests never call Claude (fake client); real calls during development need the user's OK first.

@@ -1,11 +1,14 @@
 // Filter bar (§9.2 v1.8): search box, condition chips, Filter button, Sort menu, Clear and
-// Save as view. Manual filters stay available after the AI filter ships.
+// Save as view. Manual filters stay available alongside the AI filter (§8.1 v1.11): Enter or ✨
+// turns the search text into chips.
 import type { Condition, ConditionField, FilterQueryInput } from '@tracker/shared';
-import { ArrowDownUp, Bookmark, ListFilter, Search, X } from 'lucide-react';
+import { ArrowDownUp, Bookmark, ListFilter, Loader2, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useParseFilter } from '@/api/ai.ts';
 import { useLookups, useMe } from '@/api/reference.ts';
 import { useCreateView } from '@/api/views.ts';
+import { SparkleIcon } from '@/components/icons.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import {
   Command,
@@ -39,8 +42,10 @@ import {
   fieldMeta,
   opLabel,
   SORT_LABEL,
+  toUserFilter,
   type UserFilter,
 } from '@/lib/filters.ts';
+import { cn } from '@/lib/utils.ts';
 import { ConditionEditor } from './ConditionEditor.tsx';
 
 export function FilterBar({
@@ -58,46 +63,138 @@ export function FilterBar({
   canSaveView?: boolean;
 }) {
   const hasAnything = value.conditions.length > 0 || !!value.search || !!value.sort;
+  const ai = useParseFilter();
+  const [note, setNote] = useState<{ kind: 'ok' | 'none' | 'error'; text: string } | null>(null);
+
+  // Any manual change ends the "Understood as …" note (§8.1 v1.11).
+  const edit = (next: UserFilter) => {
+    setNote(null);
+    onChange(next);
+  };
+
+  const askAi = (text: string) => {
+    if (!text || ai.isPending) return;
+    setNote(null);
+    ai.mutate(
+      { text },
+      {
+        onSuccess: ({ filter, interpretation }) => {
+          if (filter.conditions.length > 0 || filter.sort) {
+            onChange(toUserFilter(filter)); // replaces chips, search and sort
+            setNote({ kind: 'ok', text: interpretation });
+          } else {
+            onChange({ ...value, search: text }); // no filter found: keep it a text search
+            setNote({ kind: 'none', text: interpretation });
+          }
+        },
+        onError: (err) => {
+          onChange({ ...value, search: text });
+          setNote({ kind: 'error', text: `${err.message} Showing a text search instead.` });
+        },
+      },
+    );
+  };
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-1.5 border-b px-4 py-2"
-      role="search"
-      aria-label="Filter tasks"
-    >
-      <SearchBox
-        value={value.search ?? ''}
-        onChange={(search) => onChange({ ...value, search: search || undefined })}
-      />
-      {value.conditions.map((c, i) => (
-        <ConditionChip
-          key={`${c.field}-${i}`}
-          condition={c}
-          onChange={(next) =>
-            onChange({ ...value, conditions: value.conditions.map((x, j) => (j === i ? next : x)) })
-          }
-          onRemove={() =>
-            onChange({ ...value, conditions: value.conditions.filter((_, j) => j !== i) })
-          }
+    <div className="flex flex-col border-b">
+      <div
+        className="flex flex-wrap items-center gap-1.5 px-4 py-2"
+        role="search"
+        aria-label="Filter tasks"
+      >
+        <SearchBox
+          value={value.search ?? ''}
+          onChange={(search) => edit({ ...value, search: search || undefined })}
+          onAsk={askAi}
+          asking={ai.isPending}
         />
-      ))}
-      <AddFilterButton
-        onAdd={(c) => onChange({ ...value, conditions: [...value.conditions, c] })}
-      />
-      <SortMenu value={value} onChange={onChange} />
-      <span className="flex-1" />
-      {hasAnything && (
-        <Button variant="ghost" onClick={() => onChange({ conditions: [] })}>
-          Clear
-        </Button>
-      )}
-      {canSaveView && <SaveViewButton filter={effectiveFilter} layout={layout} />}
+        {value.conditions.map((c, i) => (
+          <ConditionChip
+            key={`${c.field}-${i}`}
+            condition={c}
+            onChange={(next) =>
+              edit({ ...value, conditions: value.conditions.map((x, j) => (j === i ? next : x)) })
+            }
+            onRemove={() =>
+              edit({ ...value, conditions: value.conditions.filter((_, j) => j !== i) })
+            }
+          />
+        ))}
+        <AddFilterButton onAdd={(c) => edit({ ...value, conditions: [...value.conditions, c] })} />
+        <SortMenu value={value} onChange={edit} />
+        <span className="flex-1" />
+        {hasAnything && (
+          <Button variant="ghost" onClick={() => edit({ conditions: [] })}>
+            Clear
+          </Button>
+        )}
+        {canSaveView && <SaveViewButton filter={effectiveFilter} layout={layout} />}
+      </div>
+      <AiNote asking={ai.isPending} note={note} onDismiss={() => setNote(null)} />
     </div>
   );
 }
 
-/** Full-text search (§6.3), debounced into the URL. */
-function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** "✨ Understood as …" line (§8.1, AI marker §9.1). */
+function AiNote({
+  asking,
+  note,
+  onDismiss,
+}: {
+  asking: boolean;
+  note: { kind: 'ok' | 'none' | 'error'; text: string } | null;
+  onDismiss: () => void;
+}) {
+  if (!asking && !note) return <div aria-live="polite" className="sr-only" />;
+  return (
+    <div
+      aria-live="polite"
+      role={note?.kind === 'error' ? 'alert' : undefined}
+      className={cn(
+        'mx-4 mb-2 flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs',
+        note?.kind === 'error'
+          ? 'border border-destructive/40 text-destructive'
+          : 'bg-ai-soft text-ai',
+      )}
+    >
+      {asking ? (
+        <>
+          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          Asking Claude to turn this into a filter…
+        </>
+      ) : (
+        <>
+          <SparkleIcon className="size-3.5" />
+          <span className="flex-1">
+            {note?.kind === 'ok' && <span className="font-medium">Understood as: </span>}
+            {note?.text}
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={onDismiss}
+            className="rounded-sm p-0.5 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="size-3" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Full-text search (§6.3), debounced into the URL; Enter or ✨ asks Claude (§8.1 v1.11). */
+function SearchBox({
+  value,
+  onChange,
+  onAsk,
+  asking,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onAsk: (text: string) => void;
+  asking: boolean;
+}) {
   const [draft, setDraft] = useState(value);
   const [synced, setSynced] = useState(value);
   // Follow outside changes (Clear, a saved view, back/forward) without an effect. Our own
@@ -113,17 +210,17 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
   }, [draft, onChange, value]);
 
   return (
-    <div className="flex h-7 min-w-[220px] flex-[0_1_320px] items-center gap-1.5 rounded-md border bg-card px-2 focus-within:ring-2 focus-within:ring-ring">
+    <div className="flex h-7 min-w-[220px] flex-[0_1_380px] items-center gap-1.5 rounded-md border bg-card px-2 focus-within:ring-2 focus-within:ring-ring">
       <Search className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden="true" />
       <input
         id="task-search"
         type="search"
-        aria-label="Search tasks"
-        placeholder="Search tasks, or a number like 123"
+        aria-label="Search tasks, or describe a filter and press Enter"
+        placeholder="Search, or describe a filter and press Enter"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') onChange(draft.trim());
+          if (e.key === 'Enter') onAsk(draft.trim());
           if (e.key === 'Escape' && draft) {
             e.stopPropagation();
             setDraft('');
@@ -132,6 +229,20 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
         }}
         className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-subtle-foreground"
       />
+      <button
+        type="button"
+        aria-label="Turn this text into a filter with AI"
+        title="Turn this text into a filter (Enter)"
+        disabled={!draft.trim() || asking}
+        onClick={() => onAsk(draft.trim())}
+        className="-mr-1 inline-flex size-5 items-center justify-center rounded-sm text-ai outline-none hover:bg-ai-soft focus-visible:ring-2 focus-visible:ring-ring disabled:text-subtle-foreground disabled:opacity-60"
+      >
+        {asking ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <SparkleIcon className="size-3.5" />
+        )}
+      </button>
     </div>
   );
 }
