@@ -18,6 +18,8 @@
 | 1.1     | 2026-11-19 | Scaffold decisions: `pg` driver; `scripts/dev.mjs` runs client + server together (no runner library); Docker Postgres on ports 5434 (dev) / 5435 (test) so it doesn't clash with a local Postgres on 5432. Approved supporting packages for build/types, Tailwind + shadcn runtime and ESLint.                                                   |
 | 1.2     | 2026-11-19 | Data model details: UUID primary keys; `teams.next_task_number` counter column; hard deletes with defined FK rules; `task_activity.kind` enum.                                                                                                                                                                                                   |
 | 1.3     | 2026-11-19 | Tasks no longer belong to a team: team is derived from the assignee; one team per user. Global task IDs `TSK-<n>` (replaces per-team numbers and `teams.next_task_number`). Filter AST approved with per-field operators. API responses use stable identifiers; list responses add `total`. AI assignee candidates come from the task's product. |
+| 1.4     | 2026-11-19 | Task screen: open task in `?task=` on the current list (no `/task/:id` route); Inbox removed; Triage is a top-level, workspace-wide page; team pages have Active / Backlog with defined filters; routes approved.                                                                                                                                |
+| 1.5     | 2026-11-19 | Approved the `cn` package (shadcn-ui) used by generated shadcn components; it replaces clsx + tailwind-merge.                                                                                                                                                                                                                                    |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -144,33 +146,33 @@ The client reaches the API through the Vite dev proxy (`/api` → `localhost:300
 
 Adding a library that isn't listed here counts as a design change (ask first).
 
-| Area                      | Library                                                                                                                     | Status                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Language                  | TypeScript (strict)                                                                                                         | Approved                     |
-| Monorepo                  | npm workspaces                                                                                                              | Approved                     |
-| Frontend build            | Vite                                                                                                                        | Approved                     |
-| UI                        | React                                                                                                                       | Approved                     |
-| Routing                   | React Router                                                                                                                | Approved                     |
-| Server state              | TanStack React Query                                                                                                        | Approved                     |
-| Components                | shadcn/ui (Radix primitives)                                                                                                | Approved                     |
-| Styling                   | Tailwind CSS (required by shadcn)                                                                                           | Approved (implied by shadcn) |
-| Command palette           | cmdk (shadcn `Command`)                                                                                                     | Approved (part of shadcn)    |
-| Backend                   | Express                                                                                                                     | Approved                     |
-| ORM / migrations          | Drizzle ORM + drizzle-kit                                                                                                   | Approved                     |
-| Database                  | PostgreSQL via Docker Compose                                                                                               | Approved                     |
-| Postgres driver           | pg (node-postgres), via `drizzle-orm/node-postgres`                                                                         | Approved (v1.1)              |
-| Dev process runner        | none: `scripts/dev.mjs` spawns client + server and passes `--user`                                                          | Approved (v1.1)              |
-| Build / types             | typescript, `@types/*` for approved libraries, @vitejs/plugin-react                                                         | Approved (v1.1)              |
-| Tailwind + shadcn runtime | @tailwindcss/vite, class-variance-authority, clsx, tailwind-merge, tw-animate-css, Radix packages installed by `shadcn add` | Approved (v1.1)              |
-| ESLint plugins            | @eslint/js, typescript-eslint, eslint-plugin-react-hooks, globals, eslint-config-prettier                                   | Approved (v1.1)              |
-| AI                        | `@anthropic-ai/sdk` (server only)                                                                                           | Approved                     |
-| Tests                     | Vitest + Supertest                                                                                                          | Approved                     |
-| Validation                | Zod (shared between client and server; also validates AI output)                                                            | Approved                     |
-| Keyboard shortcuts        | react-hotkeys-hook                                                                                                          | Approved                     |
-| Board drag & drop         | @dnd-kit (status can also change via keyboard/menu)                                                                         | Approved                     |
-| Lint / format             | ESLint + Prettier (shared root config)                                                                                      | Approved                     |
-| Server dev runner         | tsx (`tsx watch`)                                                                                                           | Approved                     |
-| Icons                     | lucide-react (shadcn default) + custom status/priority SVG components                                                       | Approved                     |
+| Area                      | Library                                                                                                                                                                                             | Status                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Language                  | TypeScript (strict)                                                                                                                                                                                 | Approved                     |
+| Monorepo                  | npm workspaces                                                                                                                                                                                      | Approved                     |
+| Frontend build            | Vite                                                                                                                                                                                                | Approved                     |
+| UI                        | React                                                                                                                                                                                               | Approved                     |
+| Routing                   | React Router                                                                                                                                                                                        | Approved                     |
+| Server state              | TanStack React Query                                                                                                                                                                                | Approved                     |
+| Components                | shadcn/ui (Radix primitives)                                                                                                                                                                        | Approved                     |
+| Styling                   | Tailwind CSS (required by shadcn)                                                                                                                                                                   | Approved (implied by shadcn) |
+| Command palette           | cmdk (shadcn `Command`)                                                                                                                                                                             | Approved (part of shadcn)    |
+| Backend                   | Express                                                                                                                                                                                             | Approved                     |
+| ORM / migrations          | Drizzle ORM + drizzle-kit                                                                                                                                                                           | Approved                     |
+| Database                  | PostgreSQL via Docker Compose                                                                                                                                                                       | Approved                     |
+| Postgres driver           | pg (node-postgres), via `drizzle-orm/node-postgres`                                                                                                                                                 | Approved (v1.1)              |
+| Dev process runner        | none: `scripts/dev.mjs` spawns client + server and passes `--user`                                                                                                                                  | Approved (v1.1)              |
+| Build / types             | typescript, `@types/*` for approved libraries, @vitejs/plugin-react                                                                                                                                 | Approved (v1.1)              |
+| Tailwind + shadcn runtime | @tailwindcss/vite, class-variance-authority, `cn` (shadcn-ui class-name merging; replaces clsx + tailwind-merge, v1.5), tw-animate-css, cmdk, `radix-ui` / Radix packages installed by `shadcn add` | Approved (v1.1, v1.5)        |
+| ESLint plugins            | @eslint/js, typescript-eslint, eslint-plugin-react-hooks, globals, eslint-config-prettier                                                                                                           | Approved (v1.1)              |
+| AI                        | `@anthropic-ai/sdk` (server only)                                                                                                                                                                   | Approved                     |
+| Tests                     | Vitest + Supertest                                                                                                                                                                                  | Approved                     |
+| Validation                | Zod (shared between client and server; also validates AI output)                                                                                                                                    | Approved                     |
+| Keyboard shortcuts        | react-hotkeys-hook                                                                                                                                                                                  | Approved                     |
+| Board drag & drop         | @dnd-kit (status can also change via keyboard/menu)                                                                                                                                                 | Approved                     |
+| Lint / format             | ESLint + Prettier (shared root config)                                                                                                                                                              | Approved                     |
+| Server dev runner         | tsx (`tsx watch`)                                                                                                                                                                                   | Approved                     |
+| Icons                     | lucide-react (shadcn default) + custom status/priority SVG components                                                                                                                               | Approved                     |
 
 ---
 
@@ -446,29 +448,40 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 ### 9.2 Layout
 
 - **Three panes:** sidebar (~220 px) | main (list or board) | task detail panel (~340 px, closable). Panes stack on narrow screens.
-- **Sidebar:** workspace, search, new task, Inbox, My issues, All views, Teams (each with Active / Backlog / Triage), Saved views, and a current-user footer showing `--user=<handle>`.
+- **Sidebar (v1.4):** workspace, search, new task, My issues, Triage, All views, Teams (each with Active / Backlog), Saved views, and a current-user footer showing `--user=<handle>`. Inbox is removed (notifications are out of scope, §2.3).
+- **List presets (v1.4):**
+
+  | Page                    | Filter                                                         |
+  | ----------------------- | -------------------------------------------------------------- |
+  | My issues               | assignee is me, status not done/canceled                       |
+  | Triage (workspace-wide) | assignee isEmpty, status not done/canceled                     |
+  | Team › Active           | team is `<key>`, status is any of todo, in_progress, in_review |
+  | Team › Backlog          | team is `<key>`, status is backlog                             |
+
 - **Main header:** breadcrumb, List/Board toggle, Display options, ⌘K trigger, and New task (`C`).
 - **Below the header:** the natural-language filter bar with parsed condition chips, Clear, and Save as view. Then a count row.
 - **List view:** priority, ID, status, title, tags, AI hint, estimate, assignee.
 - **Board view:** columns by status, cards with ID, title, priority, tags, estimate and assignee.
 
-### 9.3 Routes (draft)
+### 9.3 Routes (approved v1.4)
 
-`/` → redirect to `/my-issues` · `/my-issues` · `/team/:teamKey/:tab(active|backlog|triage)` · `/views/:viewId` · `/task/:taskId` (detail opens over the current list) · filter state in `?q=`.
+`/` → redirect to `/my-issues` · `/my-issues` · `/triage` · `/team/:teamKey/:tab(active|backlog)` · `/views/:viewId` · filter state in `?q=`.
+
+The open task is a search parameter on the current list (`?task=TSK-142`), so the list stays in place, the panel opens beside it, and reloads and shared links keep both. There is no separate `/task/:taskId` route.
 
 ### 9.4 Keyboard map (approved)
 
-| Key                      | Action                                                                           |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| `⌘K` / `Ctrl+K`          | Command palette                                                                  |
-| `/`                      | Focus the natural-language filter                                                |
-| `C`                      | New task                                                                         |
-| `J` / `K` or `↑` / `↓`   | Move selection                                                                   |
-| `Enter`                  | Open task                                                                        |
-| `Esc`                    | Close panel / dialog, return focus to the list                                   |
-| `S`, `P`, `A`, `E`, `L`  | Set status / priority / assignee / estimate / labels (tags) on the selected task |
-| `G` then `I` / `M` / `E` | Go to Inbox / My issues / Engineering                                            |
-| `⌘B`                     | Toggle list / board                                                              |
+| Key                     | Action                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `⌘K` / `Ctrl+K`         | Command palette                                                                  |
+| `/`                     | Focus the natural-language filter                                                |
+| `C`                     | New task                                                                         |
+| `J` / `K` or `↑` / `↓`  | Move selection                                                                   |
+| `Enter`                 | Open task                                                                        |
+| `Esc`                   | Close panel / dialog, return focus to the list                                   |
+| `S`, `P`, `A`, `E`, `L` | Set status / priority / assignee / estimate / labels (tags) on the selected task |
+| `G` then `M` / `E`      | Go to My issues / Engineering (v1.4: `G I` removed with Inbox)                   |
+| `⌘B`                    | Toggle list / board                                                              |
 
 Implemented with react-hotkeys-hook. Shortcuts are disabled while typing in inputs and are listed in the command palette.
 
@@ -519,13 +532,14 @@ npm run dev -- --user=dana    # act as another seeded user
 
 ## 13. Feature log
 
-| Feature                                                                    | Status              | Spec / sections |
-| -------------------------------------------------------------------------- | ------------------- | --------------- |
-| Design language mockup                                                     | Approved 2026-11-19 | §9.1, §9.2      |
-| Workspace scaffold                                                         | Done 2026-11-19     | §3, §4, §10     |
-| Data model, migration, seed                                                | Done 2026-11-19     | §5, §6.3, §10   |
-| Tasks without team (migration 0001)                                        | Done 2026-11-19     | §5 (v1.3)       |
-| Task API: reference data, CRUD, filter compiler, search, cursor pagination | Done 2026-11-19     | §6, §7          |
+| Feature                                                                                                  | Status              | Spec / sections  |
+| -------------------------------------------------------------------------------------------------------- | ------------------- | ---------------- |
+| Design language mockup                                                                                   | Approved 2026-11-19 | §9.1, §9.2       |
+| Workspace scaffold                                                                                       | Done 2026-11-19     | §3, §4, §10      |
+| Data model, migration, seed                                                                              | Done 2026-11-19     | §5, §6.3, §10    |
+| Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)        |
+| Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7           |
+| Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5 |
 
 ---
 

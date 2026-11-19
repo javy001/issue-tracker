@@ -13,12 +13,13 @@
     "@tanstack/react-query": "^5.108.1",
     "@tracker/shared": "^0.0.0",
     "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "cn": "^0.5.2",
     "lucide-react": "^1.76.0",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-router": "^8.5.2",
-    "tailwind-merge": "^3.7.0"
+    "react-router": "^8.5.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
