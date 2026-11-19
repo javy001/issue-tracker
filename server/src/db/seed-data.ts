@@ -46,7 +46,7 @@ export const TEAMS: TeamSeed[] = [
     key: 'ENG',
     name: 'Engineering',
     color: '#1F7A6D',
-    members: ['ana', 'ben', 'chen', 'eli', 'gus'],
+    members: ['ana', 'ben', 'chen'],
     generatedCount: 255,
     products: [
       ['Web App', 5],
@@ -62,7 +62,7 @@ export const TEAMS: TeamSeed[] = [
     key: 'DES',
     name: 'Design',
     color: '#8A3F6B',
-    members: ['dana', 'fatima', 'ana'],
+    members: ['dana', 'fatima'],
     generatedCount: 110,
     products: [
       ['Web App', 6],
@@ -77,7 +77,7 @@ export const TEAMS: TeamSeed[] = [
     key: 'PLT',
     name: 'Platform',
     color: '#B4532A',
-    members: ['eli', 'gus', 'chen'],
+    members: ['eli', 'gus'],
     generatedCount: 125,
     products: [
       ['API', 7],
@@ -249,7 +249,7 @@ export const ESTIMATE_CHOICES: [number, number][] = [
 
 // Hand-written tasks that match the approved design mockup, so the demo opens on familiar data.
 export interface HandcraftedTask {
-  team: string;
+  createdBy: Handle;
   title: string;
   description: string;
   status: TaskStatus;
@@ -263,7 +263,7 @@ export interface HandcraftedTask {
 
 export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Login redirect loops after session expires',
     description:
       'After the session cookie expires, /login redirects to /tasks, which redirects back to /login. Repro: idle for 30 minutes, then reload any task page.',
@@ -276,7 +276,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 2,
   },
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Saved view filters drop tag conditions on reload',
     description:
       'Saving a view with a tag condition works, but after a reload the tag condition is missing from the filter. Other conditions persist.',
@@ -289,7 +289,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 3,
   },
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Keyboard focus lost after closing task panel',
     description:
       'Pressing Esc closes the panel, but focus moves to the document body instead of returning to the selected row.',
@@ -302,7 +302,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 4,
   },
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Board drag-and-drop flickers on Safari',
     description:
       'Cards flash at their old position for one frame after dropping into a new column. Safari only.',
@@ -315,7 +315,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 1,
   },
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Natural-language filter: support date ranges',
     description:
       'Queries like “created last week” or “due before Friday” should parse into date conditions.',
@@ -328,7 +328,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 5,
   },
   {
-    team: 'ENG',
+    createdBy: 'ana',
     title: 'Offline banner overlaps the header',
     description: 'On small screens the offline banner covers the top navigation.',
     status: 'backlog',
@@ -340,7 +340,7 @@ export const HANDCRAFTED_TASKS: HandcraftedTask[] = [
     daysAgo: 6,
   },
   {
-    team: 'DES',
+    createdBy: 'dana',
     title: 'Command palette visual pass',
     description: 'Tighten spacing, group headers and the keyboard hint style in the ⌘K palette.',
     status: 'in_review',

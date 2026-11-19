@@ -61,13 +61,12 @@ function createRng(seed: number) {
 }
 
 interface DraftTask {
-  team: string;
   title: string;
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
   assignee: Handle | null;
-  product: ProductName;
+  product: ProductName | null;
   tags: TagName[];
   estimateHours: number | null;
   estimateSource: EstimateSource | null;
@@ -94,6 +93,7 @@ export function buildDraftTasks(now: Date): DraftTask[] {
   const rng = createRng(SEED);
   const drafts: DraftTask[] = [];
 
+  // Teams only shape the generated work (§5 v1.3: a task's team is derived from its assignee).
   for (const team of TEAMS) {
     const usedTitles = new Set<string>();
     for (let i = 0; i < team.generatedCount; i++) {
@@ -123,14 +123,15 @@ export function buildDraftTasks(now: Date): DraftTask[] {
       );
 
       drafts.push({
-        team: team.key,
         title,
         description: rng.pick(DESCRIPTION_TEMPLATES[kind]).replaceAll('{area}', area.toLowerCase()),
         status,
         priority,
         assignee,
-        product,
-        tags: tagsFor(kind, area, title, product),
+        // Product is optional (§5); a few tasks have none.
+        product: rng.chance(0.04) ? null : product,
+        // Some tasks are left untagged, as in a real tracker.
+        tags: rng.chance(0.08) ? [] : tagsFor(kind, area, title, product),
         estimateHours,
         estimateSource: estimateHours === null ? null : rng.chance(0.1) ? 'ai' : 'manual',
         createdBy: rng.pick(team.members),
@@ -141,18 +142,16 @@ export function buildDraftTasks(now: Date): DraftTask[] {
   }
 
   for (const h of HANDCRAFTED_TASKS) {
-    const team = TEAMS.find((t) => t.key === h.team)!;
     const createdAt = new Date(now.getTime() - h.daysAgo * DAY_MS);
     drafts.push({
       ...h,
       estimateSource: h.estimateHours === null ? null : 'manual',
-      createdBy: team.members[0]!,
       createdAt,
       updatedAt: new Date(createdAt.getTime() + DAY_MS / 2),
     });
   }
 
-  // Per-team numbers follow creation order, like a real tracker.
+  // Inserted in creation order, so the global TSK numbers follow creation order too.
   return drafts.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
@@ -167,7 +166,8 @@ export async function seed(db: Db, now = new Date()) {
 
   await db.transaction(async (tx) => {
     await tx.execute(
-      sql`truncate table task_activity, task_tags, saved_views, tasks, team_members, tags, products, teams, users cascade`,
+      // RESTART IDENTITY resets the TSK number sequence.
+      sql`truncate table task_activity, task_tags, saved_views, tasks, team_members, tags, products, teams, users restart identity cascade`,
     );
 
     const userRows = await tx
@@ -186,19 +186,9 @@ export async function seed(db: Db, now = new Date()) {
       .returning();
     const tagId = new Map(tagRows.map((t) => [t.name, t.id]));
 
-    // Counters start past the seeded tasks so new tasks continue the sequence (§5).
-    const countByTeam = new Map<string, number>();
-    for (const d of drafts) countByTeam.set(d.team, (countByTeam.get(d.team) ?? 0) + 1);
     const teamRows = await tx
       .insert(teams)
-      .values(
-        TEAMS.map((t) => ({
-          key: t.key,
-          name: t.name,
-          color: t.color,
-          nextTaskNumber: (countByTeam.get(t.key) ?? 0) + 1,
-        })),
-      )
+      .values(TEAMS.map((t) => ({ key: t.key, name: t.name, color: t.color })))
       .returning();
     const teamId = new Map(teamRows.map((t) => [t.key, t.id]));
     await tx
@@ -209,19 +199,14 @@ export async function seed(db: Db, now = new Date()) {
         ),
       );
 
-    const nextNumber = new Map<string, number>();
     const taskValues = drafts.map((d) => {
-      const number = (nextNumber.get(d.team) ?? 0) + 1;
-      nextNumber.set(d.team, number);
       return {
-        teamId: teamId.get(d.team)!,
-        number,
         title: d.title,
         description: d.description,
         status: d.status,
         priority: d.priority,
         assigneeId: d.assignee ? userId.get(d.assignee)! : null,
-        productId: productId.get(d.product)!,
+        productId: d.product ? productId.get(d.product)! : null,
         estimateHours: d.estimateHours,
         estimateSource: d.estimateSource,
         createdBy: userId.get(d.createdBy)!,

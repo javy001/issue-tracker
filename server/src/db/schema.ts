@@ -52,14 +52,9 @@ export const teams = pgTable(
     key: text('key').notNull().unique(),
     name: text('name').notNull(),
     color: text('color').notNull(),
-    // §5 (v1.2): per-team task number counter, incremented in the task-create transaction.
-    nextTaskNumber: integer('next_task_number').notNull().default(1),
     createdAt: createdAt(),
   },
-  (t) => [
-    check('teams_key_format', sql`${t.key} ~ '^[A-Z][A-Z0-9]{1,9}$'`),
-    check('teams_next_task_number_positive', sql`${t.nextTaskNumber} > 0`),
-  ],
+  (t) => [check('teams_key_format', sql`${t.key} ~ '^[A-Z][A-Z0-9]{1,9}$'`)],
 );
 
 export const teamMembers = pgTable(
@@ -74,7 +69,8 @@ export const teamMembers = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.teamId, t.userId] }),
-    index('team_members_user_idx').on(t.userId),
+    // §5 (v1.3): one team per user.
+    unique('team_members_user_unique').on(t.userId),
   ],
 );
 
@@ -88,10 +84,8 @@ export const tasks = pgTable(
   'tasks',
   {
     id: id(),
-    teamId: uuid('team_id')
-      .notNull()
-      .references(() => teams.id, { onDelete: 'restrict' }),
-    number: integer('number').notNull(),
+    // §5 (v1.3): global sequence; display ID is `TSK-<number>`. A task's team is its assignee's team.
+    number: integer('number').notNull().unique('tasks_number_unique').generatedAlwaysAsIdentity(),
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     status: taskStatusEnum('status').notNull().default('backlog'),
@@ -117,8 +111,6 @@ export const tasks = pgTable(
       ),
   },
   (t) => [
-    // Also serves lookups by team_id (leading column).
-    unique('tasks_team_number_unique').on(t.teamId, t.number),
     index('tasks_status_idx').on(t.status),
     index('tasks_priority_idx').on(t.priority),
     index('tasks_assignee_idx').on(t.assigneeId),

@@ -7,16 +7,17 @@
 
 ## 0. Status & change log
 
-| Version | Date       | Change                                                                                                                                                                                                                                                                                         |
-| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0.1     | 2026-11-19 | Initial draft: requirements, stack, architecture, approved design language. Open items marked **TBD**.                                                                                                                                                                                         |
-| 0.2     | 2026-11-19 | Data model decisions: fixed status enum, 5-level priority enum, estimates in hours, products as a table referenced by FK.                                                                                                                                                                      |
-| 0.3     | 2026-11-19 | Estimates: 0.5 h steps, 0.5–80 h. Task IDs: per-team numbers (ENG-142).                                                                                                                                                                                                                        |
-| 0.4     | 2026-11-19 | Postgres full-text search, personal saved views, cursor pagination.                                                                                                                                                                                                                            |
-| 0.5     | 2026-11-19 | Libraries approved: Zod, react-hotkeys-hook, @dnd-kit, ESLint + Prettier, tsx, lucide-react.                                                                                                                                                                                                   |
-| 1.0     | 2026-11-19 | AI: effort `low` for all calls, server-side refusal fallback enabled. Keyboard map approved. All v0.1 open questions resolved.                                                                                                                                                                 |
-| 1.1     | 2026-11-19 | Scaffold decisions: `pg` driver; `scripts/dev.mjs` runs client + server together (no runner library); Docker Postgres on ports 5434 (dev) / 5435 (test) so it doesn't clash with a local Postgres on 5432. Approved supporting packages for build/types, Tailwind + shadcn runtime and ESLint. |
-| 1.2     | 2026-11-19 | Data model details: UUID primary keys; `teams.next_task_number` counter column; hard deletes with defined FK rules; `task_activity.kind` enum.                                                                                                                                                 |
+| Version | Date       | Change                                                                                                                                                                                                                                                                                                                                           |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.1     | 2026-11-19 | Initial draft: requirements, stack, architecture, approved design language. Open items marked **TBD**.                                                                                                                                                                                                                                           |
+| 0.2     | 2026-11-19 | Data model decisions: fixed status enum, 5-level priority enum, estimates in hours, products as a table referenced by FK.                                                                                                                                                                                                                        |
+| 0.3     | 2026-11-19 | Estimates: 0.5 h steps, 0.5–80 h. Task IDs: per-team numbers (ENG-142).                                                                                                                                                                                                                                                                          |
+| 0.4     | 2026-11-19 | Postgres full-text search, personal saved views, cursor pagination.                                                                                                                                                                                                                                                                              |
+| 0.5     | 2026-11-19 | Libraries approved: Zod, react-hotkeys-hook, @dnd-kit, ESLint + Prettier, tsx, lucide-react.                                                                                                                                                                                                                                                     |
+| 1.0     | 2026-11-19 | AI: effort `low` for all calls, server-side refusal fallback enabled. Keyboard map approved. All v0.1 open questions resolved.                                                                                                                                                                                                                   |
+| 1.1     | 2026-11-19 | Scaffold decisions: `pg` driver; `scripts/dev.mjs` runs client + server together (no runner library); Docker Postgres on ports 5434 (dev) / 5435 (test) so it doesn't clash with a local Postgres on 5432. Approved supporting packages for build/types, Tailwind + shadcn runtime and ESLint.                                                   |
+| 1.2     | 2026-11-19 | Data model details: UUID primary keys; `teams.next_task_number` counter column; hard deletes with defined FK rules; `task_activity.kind` enum.                                                                                                                                                                                                   |
+| 1.3     | 2026-11-19 | Tasks no longer belong to a team: team is derived from the assignee; one team per user. Global task IDs `TSK-<n>` (replaces per-team numbers and `teams.next_task_number`). Filter AST approved with per-field operators. API responses use stable identifiers; list responses add `total`. AI assignee candidates come from the task's product. |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -178,17 +179,16 @@ Adding a library that isn't listed here counts as a design change (ask first).
 ```
 -- every id is uuid, default gen_random_uuid()
 users(id, handle unique, name, avatar_color, created_at)
-teams(id, key unique  -- e.g. "ENG", name, color, next_task_number int default 1, created_at)
-team_members(team_id → teams, user_id → users, PK(team_id, user_id))
+teams(id, key unique  -- e.g. "ENG", name, color, created_at)
+team_members(team_id → teams, user_id → users UNIQUE, PK(team_id, user_id))  -- one team per user (v1.3)
 products(id, name unique, created_at)
 tasks(
-  id, team_id → teams, number   -- per-team sequence; display id = teams.key || '-' || number
+  id, number UNIQUE generated always as identity   -- global sequence; display id = 'TSK-' || number (v1.3)
   title, description, status, priority,
-  assignee_id → users NULL,
+  assignee_id → users NULL,      -- a task's team is derived from its assignee (v1.3)
   product_id → products NULL,
   estimate_hours numeric(5,1) NULL, estimate_source ('manual' | 'ai') NULL,
-  created_by → users, created_at, updated_at,
-  UNIQUE(team_id, number)
+  created_by → users, created_at, updated_at
 )
 tags(id, name unique, color)
 task_tags(task_id → tasks, tag_id → tags, PK(task_id, tag_id))
@@ -196,8 +196,10 @@ saved_views(id, owner_id → users, name, filter jsonb  -- FilterQuery (§6), di
 task_activity(id, task_id → tasks, actor_id → users NULL, kind, payload jsonb, created_at)  -- simple activity list
 ```
 
-- **Primary keys (v1.2):** UUID (`gen_random_uuid()`). Tasks are addressed by display ID (`ENG-142`) in the API and UI.
-- **Task numbers (v1.2):** creating a task runs `UPDATE teams SET next_task_number = next_task_number + 1 WHERE id = $1 RETURNING next_task_number - 1` in the same transaction as the insert. Numbers are never reused.
+- **Primary keys (v1.2):** UUID (`gen_random_uuid()`). Tasks are addressed by display ID (`TSK-142`) in the API and UI.
+- **Tasks have no team (v1.3):** a task belongs to an optional product and an optional assignee. Its team is the assignee's team; unassigned tasks have no team.
+- **One team per user (v1.3):** `team_members.user_id` is unique, so each user is in at most one team.
+- **Task numbers (v1.3):** one workspace-wide Postgres identity sequence; display ID `TSK-<number>`. IDs never change (not when the product or assignee changes) and are never reused. Gaps from rolled-back inserts are acceptable.
 - **Deletes (v1.2):** hard deletes.
 
   | FK                                                                | On delete                                      |
@@ -206,12 +208,12 @@ task_activity(id, task_id → tasks, actor_id → users NULL, kind, payload json
   | `task_tags.tag_id`                                                | cascade (deleting a tag removes it from tasks) |
   | `team_members.*`                                                  | cascade                                        |
   | `tasks.assignee_id`, `tasks.product_id`, `task_activity.actor_id` | set null                                       |
-  | `tasks.team_id`, `tasks.created_by`                               | restrict                                       |
+  | `tasks.created_by`                                                | restrict                                       |
   | `saved_views.owner_id`                                            | cascade                                        |
 
 - **Activity kinds (v1.2):** Postgres enum `created, status_changed, priority_changed, assigned, estimated, tags_changed, edited`. `payload` holds `{ from, to }` values and `source: 'manual' | 'ai'`.
 
-Indexes: `tasks(status)`, `tasks(assignee_id)`, `tasks(team_id)`, `tasks(product_id)`, `tasks(priority)`, `task_tags(tag_id)`, plus a search index (§6.3).
+Indexes: `tasks(status)`, `tasks(assignee_id)`, `tasks(product_id)`, `tasks(priority)`, `task_tags(tag_id)`, plus a search index (§6.3).
 
 | Topic           | Options                                                                                  | Recommendation                                                                                                   |
 | --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -219,7 +221,7 @@ Indexes: `tasks(status)`, `tasks(assignee_id)`, `tasks(team_id)`, `tasks(product
 | **Priority**    | **Decided:** Postgres enum `none, low, medium, high, urgent`                             | Sorted by rank (urgent first)                                                                                    |
 | **Estimates**   | **Decided:** hours, 0.5 h steps, 0.5–80 h                                                | `estimate_hours numeric(5,1)` with a CHECK constraint; validated in the shared schema. Displayed as `4h`, `1.5h` |
 | **Products**    | **Decided:** own table; `tasks.product_id` FK → `products.id`                            | Enables view/filter by product                                                                                   |
-| **Task number** | **Decided:** per-team counter                                                            | Display ID = team key + number (`ENG-142`); assigned in a transaction; internal `id` stays the primary key       |
+| **Task number** | **Decided (v1.3):** global sequence                                                      | Display ID `TSK-<n>`; internal `id` stays the primary key                                                        |
 
 Migrations are generated with drizzle-kit and committed. They are never edited after being applied.
 
@@ -229,7 +231,7 @@ Migrations are generated with drizzle-kit and committed. They are never edited a
 
 One **filter AST**, defined in `shared/`, is used everywhere: the UI filter chips, URL state, the API, saved views and AI natural-language filtering (Claude outputs this same structure). The server compiles it into Drizzle SQL.
 
-### 6.1 Shape (draft)
+### 6.1 Shape (approved v1.3)
 
 ```ts
 type Field =
@@ -270,6 +272,22 @@ interface FilterQuery {
 
 - Special values: `assignee: 'me'` resolves to the current user, and `isEmpty` on `assignee` means unassigned.
 - Values reference stable identifiers (handles, team keys, product names, tag names). The server resolves them to IDs and rejects unknown ones with 400.
+- **`team` is derived (v1.3):** `team is ENG` matches tasks whose assignee is a member of ENG. Unassigned tasks match no team (`team isEmpty` matches them).
+- **Dates** are ISO 8601 strings (`2026-11-19` or a full timestamp). `between` takes `[from, to]`, both inclusive.
+- **`groupBy`** is applied by the client. The server ignores it.
+- **Operators per field (v1.3):**
+
+  | Field                    | Operators                                                                 | Value                   |
+  | ------------------------ | ------------------------------------------------------------------------- | ----------------------- |
+  | `status`, `priority`     | is, isNot, isAnyOf, isNoneOf                                              | enum value(s)           |
+  | `assignee`               | is, isNot, isAnyOf, isNoneOf, isEmpty, isNotEmpty                         | handle(s); `me` allowed |
+  | `team`                   | is, isNot, isAnyOf, isNoneOf, isEmpty, isNotEmpty                         | team key(s)             |
+  | `product`                | is, isNot, isAnyOf, isNoneOf, isEmpty, isNotEmpty                         | product name(s)         |
+  | `tag`                    | is (has), isNot (lacks), isAnyOf, isNoneOf, isEmpty (no tags), isNotEmpty | tag name(s)             |
+  | `estimate`               | is, lt, lte, gt, gte, between, isEmpty, isNotEmpty                        | hours                   |
+  | `createdAt`, `updatedAt` | lt, lte, gt, gte, between                                                 | ISO date(s)             |
+
+- **Default sort:** priority, most urgent first. When `search` is set and no sort is given, results are ordered by search rank.
 - **Views by dimension (F3)** are presets of this AST: "My issues" = `assignee is me`, a team page = `team is ENG`, and so on.
 - The filter is mirrored into the URL (encoded query string), so views can be linked to and survive a page reload.
 
@@ -280,7 +298,7 @@ A saved view stores the `FilterQuery` plus display options (`list`/`board`, dens
 
 ### 6.3 Text search
 
-**Decided:** Postgres full-text search: a generated `tsvector` column on title (weight A) + description (weight B) with a GIN index, queried with `websearch_to_tsquery` and ranked by `ts_rank` when a search term is present. A query that looks like a display ID (`ENG-142`) also matches that task exactly.
+**Decided:** Postgres full-text search: a generated `tsvector` column on title (weight A) + description (weight B) with a GIN index, queried with `websearch_to_tsquery` and ranked by `ts_rank` when a search term is present. A query that looks like a display ID (`TSK-142`) also matches that task exactly.
 
 ---
 
@@ -306,11 +324,34 @@ REST + JSON under `/api`. Request and response types come from `shared/`.
 | POST         | `/api/ai/estimate`                                       | Suggest an estimate for a task or draft (§8.2) |
 | POST         | `/api/ai/suggest-assignee`                               | Ranked assignee suggestions (§8.3)             |
 
-`:id` accepts the display ID (`ENG-142`).
+`:id` accepts the display ID (`TSK-142`).
+
+**Response shapes (v1.3):** related records are referenced by stable identifiers, the same ones the filter AST uses. The client joins names and colors from cached reference data.
+
+```ts
+interface TaskDto {
+  id: string; // display ID, e.g. "TSK-142"
+  number: number;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignee: string | null; // user handle
+  product: string | null; // product name
+  tags: string[]; // tag names, sorted
+  estimateHours: number | null;
+  estimateSource: 'manual' | 'ai' | null;
+  createdBy: string; // user handle
+  createdAt: string;
+  updatedAt: string; // ISO timestamps
+}
+// GET /api/tasks/:id adds: activity: { id, kind, actor: handle | null, payload, createdAt }[]
+// GET /api/users items include `team` (team key or null)
+```
 
 ### 7.2 Pagination & sorting
 
-**Decided:** cursor pagination. The cursor is opaque (base64 of the last row's `(sortKey, id)`); default `limit` 50, max 200. Responses are `{ items, nextCursor | null }`. The client uses React Query `useInfiniteQuery`. The board view loads per status column with the same endpoint.
+**Decided:** cursor pagination. The cursor is opaque (base64 of the last row's `(sortKey, id)`); default `limit` 50, max 200. Responses are `{ items, nextCursor | null, total }`, where `total` is the number of tasks matching the filter (v1.3; powers the count row and board column counts). The client uses React Query `useInfiniteQuery`. The board view loads per status column with the same endpoint.
 
 ### 7.3 Error format
 
@@ -355,7 +396,7 @@ Input: the task's title, description, tags and product, plus a sample of similar
 
 ### 8.3 Suggested assignees
 
-Input: the task, plus the members of the task's team, each with their recent completed tasks (titles and tags) and current open workload. Output: up to 3 `{ handle, score, reason }` ranked. Shown for unassigned tasks: one-click assign or dismiss.
+Input: the task, plus candidate users, each with their recent completed tasks (titles and tags) and current open workload. Candidates (v1.3) are users who have worked on tasks of the same product; if there are none, or the task has no product, all users. Output: up to 3 `{ handle, score, reason }` ranked. Shown for unassigned tasks: one-click assign or dismiss.
 
 ---
 
@@ -478,11 +519,13 @@ npm run dev -- --user=dana    # act as another seeded user
 
 ## 13. Feature log
 
-| Feature                     | Status              | Spec / sections |
-| --------------------------- | ------------------- | --------------- |
-| Design language mockup      | Approved 2026-11-19 | §9.1, §9.2      |
-| Workspace scaffold          | Done 2026-11-19     | §3, §4, §10     |
-| Data model, migration, seed | Done 2026-11-19     | §5, §6.3, §10   |
+| Feature                                                                    | Status              | Spec / sections |
+| -------------------------------------------------------------------------- | ------------------- | --------------- |
+| Design language mockup                                                     | Approved 2026-11-19 | §9.1, §9.2      |
+| Workspace scaffold                                                         | Done 2026-11-19     | §3, §4, §10     |
+| Data model, migration, seed                                                | Done 2026-11-19     | §5, §6.3, §10   |
+| Tasks without team (migration 0001)                                        | Done 2026-11-19     | §5 (v1.3)       |
+| Task API: reference data, CRUD, filter compiler, search, cursor pagination | Done 2026-11-19     | §6, §7          |
 
 ---
 

@@ -6,7 +6,17 @@ import { createDb } from './db/client.ts';
 
 // Runs against the test database (docker compose service `postgres-test`).
 const { db, pool } = createDb(config.TEST_DATABASE_URL);
-const app = createApp({ db });
+// These tests don't touch user data, so a placeholder user is enough.
+const app = createApp({
+  db,
+  currentUser: {
+    id: '00000000-0000-0000-0000-000000000000',
+    handle: 'test',
+    name: 'Test',
+    avatarColor: '#000000',
+    team: null,
+  },
+});
 
 afterAll(async () => {
   await pool.end();

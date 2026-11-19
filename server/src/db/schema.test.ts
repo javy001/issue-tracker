@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { config } from '../config.ts';
 import { createDb } from './client.ts';
-import { tasks, taskActivity, taskTags, teams, users } from './schema.ts';
+import { tasks, taskActivity, taskTags, teamMembers, teams, users } from './schema.ts';
 import { seed } from './seed.ts';
 
 const { db, pool } = createDb(config.TEST_DATABASE_URL);
@@ -21,28 +21,36 @@ async function firstTask() {
 }
 
 describe('seed', () => {
-  it('creates the demo data with team counters past the seeded tasks', async () => {
-    const teamRows = await db
-      .select({
-        key: teams.key,
-        next: teams.nextTaskNumber,
-        count: sql<number>`count(${tasks.id})::int`,
-        maxNumber: sql<number>`max(${tasks.number})`,
-      })
-      .from(teams)
-      .leftJoin(tasks, eq(tasks.teamId, teams.id))
-      .groupBy(teams.id);
-
-    expect(teamRows.map((t) => t.key).sort()).toEqual(['DES', 'ENG', 'PLT']);
-    for (const t of teamRows) {
-      expect(t.count).toBeGreaterThan(0);
-      expect(t.maxNumber).toBe(t.count);
-      expect(t.next).toBe(t.count + 1);
+  it('numbers tasks 1..n globally, in creation order', async () => {
+    const rows = await db
+      .select({ number: tasks.number, createdAt: tasks.createdAt })
+      .from(tasks)
+      .orderBy(tasks.number);
+    expect(rows.length).toBeGreaterThan(450);
+    rows.forEach((r, i) => expect(r.number).toBe(i + 1));
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i]!.createdAt.getTime()).toBeGreaterThanOrEqual(rows[i - 1]!.createdAt.getTime());
     }
-    const [{ total }] = (await db.select({ total: sql<number>`count(*)::int` }).from(tasks)) as [
-      { total: number },
-    ];
-    expect(total).toBeGreaterThan(450);
+  });
+
+  it('puts every user in exactly one team', async () => {
+    const teamRows = await db.select({ key: teams.key }).from(teams);
+    expect(teamRows.map((t) => t.key).sort()).toEqual(['DES', 'ENG', 'PLT']);
+    const memberships = await db
+      .select({ userId: teamMembers.userId, n: sql<number>`count(*)::int` })
+      .from(teamMembers)
+      .groupBy(teamMembers.userId);
+    const userCount = (await db.select({ id: users.id }).from(users)).length;
+    expect(memberships).toHaveLength(userCount);
+    expect(memberships.every((m) => m.n === 1)).toBe(true);
+  });
+
+  it('rejects a second team for the same user', async () => {
+    const [ana] = await db.select().from(users).where(eq(users.handle, 'ana'));
+    const [des] = await db.select().from(teams).where(eq(teams.key, 'DES'));
+    await expect(
+      db.insert(teamMembers).values({ userId: ana!.id, teamId: des!.id }),
+    ).rejects.toThrow();
   });
 
   it('is deterministic', async () => {
