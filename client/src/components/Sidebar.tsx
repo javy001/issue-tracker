@@ -1,10 +1,11 @@
-import { CircleUser, Inbox, ListFilter, Plus } from 'lucide-react';
+import { CircleUser, Inbox, ListFilter, Plus, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useHealth } from '@/api/health.ts';
 import { useMe, useTeams } from '@/api/reference.ts';
 import { useViews } from '@/api/views.ts';
 import { cn } from '@/lib/utils.ts';
+import { usePalette } from './keyboard/CommandPalette.tsx';
 import { useNewTask } from './task/NewTaskDialog.tsx';
 import { Button } from './ui/button.tsx';
 import { UserAvatar } from './UserAvatar.tsx';
@@ -16,6 +17,7 @@ export function Sidebar() {
   const views = useViews();
   const health = useHealth();
   const { openNewTask } = useNewTask();
+  const { openPalette } = usePalette();
 
   return (
     <nav
@@ -27,6 +29,9 @@ export function Sidebar() {
           N
         </span>
         <span className="flex-1">Northwind</span>
+        <Button variant="ghost" size="icon" aria-label="Search (⌘K)" onClick={() => openPalette()}>
+          <Search />
+        </Button>
         <Button variant="outline" size="icon" aria-label="New task" onClick={openNewTask}>
           <Plus />
         </Button>

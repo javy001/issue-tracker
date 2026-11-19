@@ -1,6 +1,6 @@
 // Compiles the filter AST (§6.1) into SQL. Identifiers are resolved to ids first, so unknown
 // handles/keys/names fail with 400 before any query runs.
-import { parseTaskId, type Condition, type FilterQuery } from '@tracker/shared';
+import { parseTaskReference, type Condition, type FilterQuery } from '@tracker/shared';
 import {
   and,
   eq,
@@ -215,14 +215,15 @@ export async function compileFilter(
     }
   });
 
-  // 3. Free-text search (§6.3): full-text match, or an exact display ID like TSK-142.
+  // 3. Free-text search (§6.3): full-text match, or an exact task reference (142, #142, TSK-142).
   const search = filter.search?.trim();
   let tsquery: SQL | undefined;
+  let referenced: number | null = null;
   if (search) {
     tsquery = sql`websearch_to_tsquery('english', ${search})`;
     const byText = sql`${tasks.searchVector} @@ ${tsquery}`;
-    const number = parseTaskId(search);
-    parts.push(number === null ? byText : or(byText, eq(tasks.number, number)));
+    referenced = parseTaskReference(search);
+    parts.push(referenced === null ? byText : or(byText, eq(tasks.number, referenced)));
   }
 
   // 4. Sort (§6.1): explicit sort, else search rank when searching, else priority (urgent first).
@@ -250,9 +251,14 @@ export async function compileFilter(
       cast: 'task_priority',
     };
   } else {
+    // ts_rank is below 1, so an exact task-reference match (rank 2) always comes first (v1.10).
+    const textRank = sql`ts_rank(${tasks.searchVector}, ${tsquery})`;
     sort = {
       kind: 'rank',
-      expr: sql`ts_rank(${tasks.searchVector}, ${tsquery})`,
+      expr:
+        referenced === null
+          ? textRank
+          : sql`(case when ${tasks.number} = ${referenced} then 2::real else ${textRank} end)`,
       dir: 'desc',
       cast: 'real',
     };

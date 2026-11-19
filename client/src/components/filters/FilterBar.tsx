@@ -116,9 +116,10 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
     <div className="flex h-7 min-w-[220px] flex-[0_1_320px] items-center gap-1.5 rounded-md border bg-card px-2 focus-within:ring-2 focus-within:ring-ring">
       <Search className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden="true" />
       <input
+        id="task-search"
         type="search"
         aria-label="Search tasks"
-        placeholder="Search tasks or TSK-123"
+        placeholder="Search tasks, or a number like 123"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {

@@ -88,6 +88,8 @@ function TaskRow({ task }: { task: TaskDto }) {
       <Link
         to={{ search: next.toString() }}
         aria-current={selected ? 'true' : undefined}
+        data-task-row
+        data-task-id={task.id}
         className={cn(
           'flex h-9 items-center gap-2.5 border-b px-4 text-foreground no-underline outline-none hover:bg-accent/60 focus-visible:bg-accent focus-visible:shadow-[inset_2px_0_0_var(--ring)]',
           selected && 'bg-accent shadow-[inset_2px_0_0_var(--primary)]',

@@ -231,6 +231,7 @@ function DraggableCard({ task }: { task: TaskDto }) {
         {...attributes}
         {...listeners}
         aria-roledescription="draggable task"
+        data-task-id={task.id}
         aria-label={`${task.id}: ${task.title}`}
         aria-current={params.get('task')?.toUpperCase() === task.id ? 'true' : undefined}
         onClick={open}

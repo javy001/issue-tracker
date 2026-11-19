@@ -17,6 +17,7 @@ import {
   type UserFilter,
 } from '@/lib/filters.ts';
 import { cn } from '@/lib/utils.ts';
+import { useRegisterPage, usePalette } from '@/components/keyboard/CommandPalette.tsx';
 import { usePageTaskDefaults, useNewTask, type NewTaskDefaults } from './NewTaskDialog.tsx';
 import { TaskBoard } from './TaskBoard.tsx';
 import { TaskDetailPanel } from './TaskDetailPanel.tsx';
@@ -81,6 +82,16 @@ export function TaskListPage({
   };
   const setLayout = (l: Layout) => setParam('layout', l === defaultLayout ? null : l);
 
+  // §9.4 v1.9: shortcuts and the ⌘K palette act on this page.
+  const { openPalette } = usePalette();
+  useRegisterPage({
+    openTaskId: openTask,
+    layout,
+    toggleLayout: () => setLayout(isBoard ? 'list' : 'board'),
+    openTask: (id) => setParam('task', id),
+    closeTask: () => setParam('task', null),
+  });
+
   const state: PageState = {
     userFilter: user.value,
     filterChanged: user.overridden,
@@ -123,6 +134,9 @@ export function TaskListPage({
               Board
             </LayoutButton>
           </div>
+          <Button variant="outline" onClick={() => openPalette()} aria-label="Open command palette">
+            <kbd className="font-mono text-[11px]">⌘K</kbd>
+          </Button>
           <Button size="default" onClick={openNewTask}>
             <Plus />
             New task

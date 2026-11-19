@@ -215,6 +215,26 @@ describe('filter compiler', () => {
     expect(byId.map((t) => t.id)).toContain('TSK-42');
   });
 
+  it.each(['44', '#44', 'tsk-44', ' TSK-44 '])(
+    'finds a task by reference "%s" and lists it first (§6.3 v1.10)',
+    async (search) => {
+      const results = await fetchAll({ search });
+      expect(results[0]?.id).toBe('TSK-44');
+    },
+  );
+
+  it('still includes the referenced task under an explicit sort', async () => {
+    const results = await fetchAll({ search: '44', sort: { field: 'createdAt', dir: 'asc' } });
+    expect(results.map((t) => t.id)).toContain('TSK-44');
+  });
+
+  it('only treats a bare reference as an ID: "44 login" is a text search', async () => {
+    const results = await fetchAll({ search: '44 login' });
+    const tsk44 = all.find((t) => t.id === 'TSK-44')!;
+    const textMatches = /login/i.test(`${tsk44.title} ${tsk44.description}`);
+    expect(results.some((t) => t.id === 'TSK-44')).toBe(textMatches);
+  });
+
   it('rejects unknown identifiers with a 400', async () => {
     const filter = filterQuerySchema.parse({
       conditions: [{ field: 'assignee', op: 'is', value: 'nobody' }],

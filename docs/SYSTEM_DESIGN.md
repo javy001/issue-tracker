@@ -23,6 +23,8 @@
 | 1.6     | 2026-11-19 | Task create/edit/delete UI: New task dialog prefilled from the current page, inline title/description editing, delete behind a confirmation dialog.                                                                                                                                                                                              |
 | 1.7     | 2026-11-19 | Board view: columns are the statuses the page allows, drag changes status only (no manual order), List/Board stored as `?layout=board`.                                                                                                                                                                                                          |
 | 1.8     | 2026-11-19 | Filter bar: manual chips always available (also after AI), text box searches until the AI step, page base filters hidden, state in `?q=`. Saved views: save/edit/rename/delete, sort saved with views, `SavedViewDto` API. "All views" removed from the sidebar.                                                                                 |
+| 1.9     | 2026-11-19 | Keyboard: J/K move a focus highlight; S/P/A/E/L act on the highlighted row, else the open task; their choices appear in the ⌘K palette. Palette: actions, navigation, task search.                                                                                                                                                               |
+| 1.10    | 2026-11-19 | Search: a bare number, `#n` or `TSK-n` matches that task exactly and is shown first when sorted by relevance.                                                                                                                                                                                                                                    |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -321,7 +323,7 @@ interface SavedViewDto {
 
 ### 6.3 Text search
 
-**Decided:** Postgres full-text search: a generated `tsvector` column on title (weight A) + description (weight B) with a GIN index, queried with `websearch_to_tsquery` and ranked by `ts_rank` when a search term is present. A query that looks like a display ID (`TSK-142`) also matches that task exactly.
+**Decided:** Postgres full-text search: a generated `tsvector` column on title (weight A) + description (weight B) with a GIN index, queried with `websearch_to_tsquery` and ranked by `ts_rank` when a search term is present. A query that is a task reference also matches that task exactly (v1.10): `142`, `#142` or `TSK-142` (case-insensitive). When results are ordered by relevance (search with no explicit sort), the exact match comes first; text that merely contains the number still matches as usual. This applies wherever search runs (filter bar, ⌘K palette).
 
 ---
 
@@ -519,6 +521,14 @@ The open task is a search parameter on the current list (`?task=TSK-142`), so th
 
 Implemented with react-hotkeys-hook. Shortcuts are disabled while typing in inputs and are listed in the command palette.
 
+**Behavior (v1.9):**
+
+- **Target task:** `J`/`K` (or `↑`/`↓`) move the highlight through the list by moving keyboard focus between rows, and `Enter` opens the highlighted row. `S`, `P`, `A`, `E` and `L` act on the highlighted row (or the focused board card); if nothing is highlighted, they act on the task open in the detail panel; otherwise they do nothing.
+- **Choices appear in the ⌘K palette:** `S`/`P`/`A`/`E`/`L` open the palette in a sub-mode such as "Set status — TSK-142", listing the options; type to filter, `Enter` applies. Tags (`L`) toggle and the palette stays open. Backspace on an empty input returns to the main palette.
+- **⌘K palette contents:** actions (new task, toggle List/Board, focus search, and the field setters for the target task), navigation (My issues, Triage, team pages, saved views), and task search by title or `TSK-` ID through `GET /api/tasks` (top 8 results); choosing a task opens it on the current page.
+- **`Esc`** closes the detail panel and returns focus to that task's row; Radix dialogs and popovers handle their own `Esc` first.
+- **`/`** focuses the filter bar's search box (the plain-English filter after the AI step).
+
 ### 9.5 Data fetching
 
 React Query hooks in `client/src/api/`, with query keys like `['tasks', filterQuery]` and `['task', id]`. Mutations update optimistically and roll back on error. Tasks from filtered lists are invalidated after mutations.
@@ -577,6 +587,7 @@ npm run dev -- --user=dana    # act as another seeded user
 | Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)             |
 | Board view with drag and drop, List/Board toggle                                                         | Done 2026-11-19     | §9.2, §9.3 (v1.7)       |
 | Filter bar (chips, search, sort) and saved views (API + UI)                                              | Done 2026-11-19     | §6.2, §7.1, §9.2 (v1.8) |
+| ⌘K command palette and keyboard shortcuts                                                                | Done 2026-11-19     | §9.4 (v1.9)             |
 
 ---
 
@@ -586,5 +597,4 @@ npm run dev -- --user=dana    # act as another seeded user
 2. ~~Search, saved views, pagination (§6, §7)~~ decided in v0.4
 3. ~~Extra libraries (§4)~~ decided in v0.5
 4. ~~AI settings (§8.0), keyboard map (§9.4)~~ decided in v1.0
-
-_No open questions._
+5. **Deferred (2026-11-19): list virtualization.** Render only visible list rows to keep the DOM small when hundreds of rows are loaded. Decided "not now" at seed scale (~500 tasks, 50 per page). If revisited: list only (board columns keep "Load more"); needs a library decision (`@tanstack/react-virtual` was the candidate) and changes to `J`/`K` navigation (index-based, scroll-then-focus) and `aria-setsize` / `aria-posinset` on rows.

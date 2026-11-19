@@ -21,6 +21,13 @@ export function parseTaskId(id: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+const TASK_REF_RE = new RegExp(`^(?:${TASK_ID_PREFIX}-|#)?(\\d{1,9})$`, 'i');
+/** Search queries that name a task (§6.3 v1.10): `142`, `#142` or `TSK-142`. */
+export function parseTaskReference(query: string): number | null {
+  const m = TASK_REF_RE.exec(query.trim());
+  return m ? Number(m[1]) : null;
+}
+
 // ---------- reference data ----------
 export interface UserDto {
   handle: string;
