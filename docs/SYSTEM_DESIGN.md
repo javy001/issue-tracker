@@ -21,6 +21,7 @@
 | 1.4     | 2026-11-19 | Task screen: open task in `?task=` on the current list (no `/task/:id` route); Inbox removed; Triage is a top-level, workspace-wide page; team pages have Active / Backlog with defined filters; routes approved.                                                                                                                                |
 | 1.5     | 2026-11-19 | Approved the `cn` package (shadcn-ui) used by generated shadcn components; it replaces clsx + tailwind-merge.                                                                                                                                                                                                                                    |
 | 1.6     | 2026-11-19 | Task create/edit/delete UI: New task dialog prefilled from the current page, inline title/description editing, delete behind a confirmation dialog.                                                                                                                                                                                              |
+| 1.7     | 2026-11-19 | Board view: columns are the statuses the page allows, drag changes status only (no manual order), List/Board stored as `?layout=board`.                                                                                                                                                                                                          |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -463,6 +464,9 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 - **Below the header:** the natural-language filter bar with parsed condition chips, Clear, and Save as view. Then a count row.
 - **List view:** priority, ID, status, title, tags, AI hint, estimate, assignee.
 - **Board view:** columns by status, cards with ID, title, priority, tags, estimate and assignee.
+  - **Columns (v1.7):** the statuses the page's filter allows, in workflow order (e.g. team Active: Todo, In Progress, In Review; My issues: Backlog → In Review). Each column loads its own pages from `GET /api/tasks` (§7.2) and shows its total.
+  - **Drag and drop (v1.7):** @dnd-kit, pointer and keyboard (Space to pick up and drop, arrows to move, Esc to cancel). Dropping a card in another column changes its status; there is no manual ordering, so cards stay sorted by priority. A short drag threshold keeps a plain click opening the card.
+  - **List/Board toggle (v1.7):** in the page header; stored as `?layout=board` (list is the default).
 - **Creating, editing and deleting tasks (v1.6):**
   - **New task** opens a shadcn Dialog with title, description and the same property pickers as the detail panel. Fields are prefilled from the current page: My issues → assigned to me, status Todo; Triage → unassigned; team Active → status Todo, assigned to me if I'm in that team; team Backlog → status Backlog, assigned to me if I'm in that team. After creating, the new task opens in the detail panel.
   - **Title and description** are edited inline in the detail panel: click to edit; the title saves on Enter or blur, the description on ⌘/Ctrl+Enter or blur; Esc cancels.
@@ -472,7 +476,7 @@ Reference mockup: <https://claude.ai/artifact/H2LzoXZcBd3hrE29NoKe79>
 
 `/` → redirect to `/my-issues` · `/my-issues` · `/triage` · `/team/:teamKey/:tab(active|backlog)` · `/views/:viewId` · filter state in `?q=`.
 
-The open task is a search parameter on the current list (`?task=TSK-142`), so the list stays in place, the panel opens beside it, and reloads and shared links keep both. There is no separate `/task/:taskId` route.
+The open task is a search parameter on the current list (`?task=TSK-142`), so the list stays in place, the panel opens beside it, and reloads and shared links keep both. There is no separate `/task/:taskId` route. The layout is `?layout=board` the same way (v1.7).
 
 ### 9.4 Keyboard map (approved)
 
@@ -537,15 +541,16 @@ npm run dev -- --user=dana    # act as another seeded user
 
 ## 13. Feature log
 
-| Feature                                                                                                  | Status              | Spec / sections  |
-| -------------------------------------------------------------------------------------------------------- | ------------------- | ---------------- |
-| Design language mockup                                                                                   | Approved 2026-11-19 | §9.1, §9.2       |
-| Workspace scaffold                                                                                       | Done 2026-11-19     | §3, §4, §10      |
-| Data model, migration, seed                                                                              | Done 2026-11-19     | §5, §6.3, §10    |
-| Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)        |
-| Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7           |
-| Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5 |
-| Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)      |
+| Feature                                                                                                  | Status              | Spec / sections   |
+| -------------------------------------------------------------------------------------------------------- | ------------------- | ----------------- |
+| Design language mockup                                                                                   | Approved 2026-11-19 | §9.1, §9.2        |
+| Workspace scaffold                                                                                       | Done 2026-11-19     | §3, §4, §10       |
+| Data model, migration, seed                                                                              | Done 2026-11-19     | §5, §6.3, §10     |
+| Tasks without team (migration 0001)                                                                      | Done 2026-11-19     | §5 (v1.3)         |
+| Task API: reference data, CRUD, filter compiler, search, cursor pagination                               | Done 2026-11-19     | §6, §7            |
+| Task screen: sidebar, My issues / Triage / team pages, infinite list, detail panel with property editing | Done 2026-11-19     | §9.2, §9.3, §9.5  |
+| Task create / inline edit / delete UI                                                                    | Done 2026-11-19     | §9.2 (v1.6)       |
+| Board view with drag and drop, List/Board toggle                                                         | Done 2026-11-19     | §9.2, §9.3 (v1.7) |
 
 ---
 

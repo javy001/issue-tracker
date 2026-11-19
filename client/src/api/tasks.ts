@@ -25,8 +25,9 @@ export const taskKeys = {
 
 const PAGE_SIZE = 50;
 
-export function useTaskList(filter: FilterQueryInput) {
+export function useTaskList(filter: FilterQueryInput, { enabled = true } = {}) {
   return useInfiniteQuery({
+    enabled,
     queryKey: taskKeys.list(filter),
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
@@ -68,15 +69,20 @@ function applyPatch<T extends TaskDto>(task: T, input: UpdateTaskInput): T {
 
 type ListData = InfiniteData<ListTasksResponse, string | null>;
 
-export function useUpdateTask(id: string) {
+/**
+ * Optimistic task update (§9.5). Variables carry the task id, so one mutation serves the
+ * panel and the board. `onSettled` returns the list refetch, so `mutateAsync` resolves only
+ * once lists are fresh (used by the board to drop its pending moves without a flash).
+ */
+export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: UpdateTaskInput) =>
+    mutationFn: ({ id, input }: { id: string; input: UpdateTaskInput }) =>
       apiFetch<TaskDetailDto>(`/tasks/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(input),
       }),
-    onMutate: async (input) => {
+    onMutate: async ({ id, input }) => {
       await Promise.all([
         qc.cancelQueries({ queryKey: taskKeys.detail(id) }),
         qc.cancelQueries({ queryKey: taskKeys.lists() }),
@@ -96,19 +102,17 @@ export function useUpdateTask(id: string) {
             })),
           },
       );
-      return { detail, lists };
+      return { id, detail, lists };
     },
-    onError: (_err, _input, ctx) => {
-      if (ctx?.detail) qc.setQueryData(taskKeys.detail(id), ctx.detail);
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.detail) qc.setQueryData(taskKeys.detail(ctx.id), ctx.detail);
       ctx?.lists.forEach(([key, data]) => qc.setQueryData(key, data));
     },
     onSuccess: (task) => {
-      qc.setQueryData(taskKeys.detail(id), task);
+      qc.setQueryData(taskKeys.detail(task.id), task);
     },
-    onSettled: () => {
-      // Lists may gain or lose the task (e.g. a status change on the Active page).
-      void qc.invalidateQueries({ queryKey: taskKeys.lists() });
-    },
+    // Lists may gain or lose the task (e.g. a status change on the Active page).
+    onSettled: () => qc.invalidateQueries({ queryKey: taskKeys.lists() }),
   });
 }
 

@@ -66,9 +66,9 @@ export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => vo
 }
 
 function TaskDetail({ task }: { task: TaskDetailDto }) {
-  const update = useUpdateTask(task.id);
+  const update = useUpdateTask();
   const lookups = useLookups();
-  const save = (input: UpdateTaskInput) => update.mutate(input);
+  const save = (input: UpdateTaskInput) => update.mutate({ id: task.id, input });
 
   const assignee = task.assignee ? lookups.user.get(task.assignee) : undefined;
   const team = assignee?.team ? lookups.team.get(assignee.team) : undefined;
