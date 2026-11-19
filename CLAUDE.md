@@ -35,6 +35,10 @@ npm run lint                   # ESLint
 npm run format                 # Prettier (format:check to verify only)
 npm run db:generate            # drizzle-kit: generate a migration from server/src/db/schema.ts
 npm run db:migrate             # apply migrations
+npm run db:seed                # replace all data with the deterministic demo data (~500 tasks)
+npm run db:reset               # drop everything, migrate, seed (local databases only)
 ```
+
+Tests recreate the test database from the committed migrations before each run (`server/src/test/global-setup.ts`).
 
 TypeScript is pinned to 6.0.x because typescript-eslint does not support TypeScript 7 yet.

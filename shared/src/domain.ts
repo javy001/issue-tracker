@@ -24,6 +24,22 @@ export const PRIORITY_RANK: Record<TaskPriority, number> = {
   none: 4,
 };
 
+// §5: who set an estimate.
+export const ESTIMATE_SOURCES = ['manual', 'ai'] as const;
+export type EstimateSource = (typeof ESTIMATE_SOURCES)[number];
+
+// §5 (v1.2): kinds of entries in a task's activity list.
+export const ACTIVITY_KINDS = [
+  'created',
+  'status_changed',
+  'priority_changed',
+  'assigned',
+  'estimated',
+  'tags_changed',
+  'edited',
+] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
 // §5: estimates in hours, 0.5 h steps, 0.5–80 h.
 export const ESTIMATE_HOURS = { min: 0.5, max: 80, step: 0.5 } as const;
 export const estimateHoursSchema = z

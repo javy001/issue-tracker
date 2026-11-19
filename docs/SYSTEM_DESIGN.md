@@ -16,6 +16,7 @@
 | 0.5     | 2026-11-19 | Libraries approved: Zod, react-hotkeys-hook, @dnd-kit, ESLint + Prettier, tsx, lucide-react.                                                                                                                                                                                                   |
 | 1.0     | 2026-11-19 | AI: effort `low` for all calls, server-side refusal fallback enabled. Keyboard map approved. All v0.1 open questions resolved.                                                                                                                                                                 |
 | 1.1     | 2026-11-19 | Scaffold decisions: `pg` driver; `scripts/dev.mjs` runs client + server together (no runner library); Docker Postgres on ports 5434 (dev) / 5435 (test) so it doesn't clash with a local Postgres on 5432. Approved supporting packages for build/types, Tailwind + shadcn runtime and ESLint. |
+| 1.2     | 2026-11-19 | Data model details: UUID primary keys; `teams.next_task_number` counter column; hard deletes with defined FK rules; `task_activity.kind` enum.                                                                                                                                                 |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -175,8 +176,9 @@ Adding a library that isn't listed here counts as a design change (ask first).
 ## 5. Data model (Drizzle / Postgres)
 
 ```
+-- every id is uuid, default gen_random_uuid()
 users(id, handle unique, name, avatar_color, created_at)
-teams(id, key unique  -- e.g. "ENG", name, color, created_at)
+teams(id, key unique  -- e.g. "ENG", name, color, next_task_number int default 1, created_at)
 team_members(team_id → teams, user_id → users, PK(team_id, user_id))
 products(id, name unique, created_at)
 tasks(
@@ -193,6 +195,21 @@ task_tags(task_id → tasks, tag_id → tags, PK(task_id, tag_id))
 saved_views(id, owner_id → users, name, filter jsonb  -- FilterQuery (§6), display jsonb, created_at)
 task_activity(id, task_id → tasks, actor_id → users NULL, kind, payload jsonb, created_at)  -- simple activity list
 ```
+
+- **Primary keys (v1.2):** UUID (`gen_random_uuid()`). Tasks are addressed by display ID (`ENG-142`) in the API and UI.
+- **Task numbers (v1.2):** creating a task runs `UPDATE teams SET next_task_number = next_task_number + 1 WHERE id = $1 RETURNING next_task_number - 1` in the same transaction as the insert. Numbers are never reused.
+- **Deletes (v1.2):** hard deletes.
+
+  | FK                                                                | On delete                                      |
+  | ----------------------------------------------------------------- | ---------------------------------------------- |
+  | `task_tags.task_id`, `task_activity.task_id`                      | cascade                                        |
+  | `task_tags.tag_id`                                                | cascade (deleting a tag removes it from tasks) |
+  | `team_members.*`                                                  | cascade                                        |
+  | `tasks.assignee_id`, `tasks.product_id`, `task_activity.actor_id` | set null                                       |
+  | `tasks.team_id`, `tasks.created_by`                               | restrict                                       |
+  | `saved_views.owner_id`                                            | cascade                                        |
+
+- **Activity kinds (v1.2):** Postgres enum `created, status_changed, priority_changed, assigned, estimated, tags_changed, edited`. `payload` holds `{ from, to }` values and `source: 'manual' | 'ai'`.
 
 Indexes: `tasks(status)`, `tasks(assignee_id)`, `tasks(team_id)`, `tasks(product_id)`, `tasks(priority)`, `task_tags(tag_id)`, plus a search index (§6.3).
 
@@ -461,10 +478,11 @@ npm run dev -- --user=dana    # act as another seeded user
 
 ## 13. Feature log
 
-| Feature                | Status              | Spec / sections |
-| ---------------------- | ------------------- | --------------- |
-| Design language mockup | Approved 2026-11-19 | §9.1, §9.2      |
-| Workspace scaffold     | Done 2026-11-19     | §3, §4, §10     |
+| Feature                     | Status              | Spec / sections |
+| --------------------------- | ------------------- | --------------- |
+| Design language mockup      | Approved 2026-11-19 | §9.1, §9.2      |
+| Workspace scaffold          | Done 2026-11-19     | §3, §4, §10     |
+| Data model, migration, seed | Done 2026-11-19     | §5, §6.3, §10   |
 
 ---
 
