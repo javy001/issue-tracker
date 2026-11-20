@@ -196,3 +196,18 @@ export interface EstimateResponse {
   /** The completed tasks the estimate was based on. */
   similarTasks: { id: string; title: string; estimateHours: number }[];
 }
+
+// §8.3 (v1.13): ranked assignee suggestions for an unassigned task.
+export const suggestAssigneeRequestSchema = z.strictObject({ taskId: z.string().trim().min(1) });
+export type SuggestAssigneeRequest = z.infer<typeof suggestAssigneeRequestSchema>;
+
+export interface AssigneeSuggestion {
+  handle: string;
+  /** 0–100, higher is a better fit. */
+  score: number;
+  reason: string;
+}
+export interface SuggestAssigneeResponse {
+  /** 1–3 suggestions, best first. */
+  suggestions: AssigneeSuggestion[];
+}

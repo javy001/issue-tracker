@@ -27,6 +27,7 @@
 | 1.10    | 2026-11-19 | Search: a bare number, `#n` or `TSK-n` matches that task exactly and is shown first when sorted by relevance.                                                                                                                                                                                                                                    |
 | 1.11    | 2026-11-19 | AI natural-language filter: Enter or ✨ in the search box, result replaces chips/search/sort, flat structured-output schema converted and validated server-side, prompt caching. AI features built one per step: filter, estimate, assignee.                                                                                                     |
 | 1.12    | 2026-11-20 | AI effort estimate: on demand only (✨ Suggest in the detail panel, any task), response returns similar tasks with titles and hours, similar-task ranking and validation defined.                                                                                                                                                                |
+| 1.13    | 2026-11-20 | AI suggested assignees: on demand only (✨ Suggest in the detail panel, unassigned tasks), candidate data and validation defined, score 0–100, `409` for assigned tasks.                                                                                                                                                                         |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -70,7 +71,7 @@ A Linear-style issue tracker built as a full-stack take-home assignment.
 | F9  | Query/filter design                                          | §6         |
 | F10 | AI: natural-language filtering                               | §8.1       |
 | F11 | AI: automated effort estimation                              | §8.2       |
-| F12 |
+| F12 | AI: suggested assignees for unassigned tasks                 | §8.3       |
 
 ### 2.2 Non-functional
 
@@ -442,6 +443,15 @@ Input: the task's title, description, tags and product, plus a sample of similar
 
 Input: the task, plus candidate users, each with their recent completed tasks (titles and tags) and current open workload. Candidates (v1.3) are users who have worked on tasks of the same product; if there are none, or the task has no product, all users. Output: up to 3 `{ handle, score, reason }` ranked. Shown for unassigned tasks: one-click assign or dismiss.
 
+**Details (v1.13):**
+
+- **Trigger:** on demand only. A ✨ **Suggest** button next to Assignee in the detail panel, shown only while the task is unassigned. Nothing runs automatically.
+- **Endpoint:** `POST /api/ai/suggest-assignee` with `{ taskId: "TSK-142" }` → `{ suggestions: { handle, score, reason }[] }`, 1–3 items, best first. A task that already has an assignee → `409 CONFLICT`.
+- **Candidates:** users who were ever assigned a task of the same product; if there are none, or the task has no product, all users. Each candidate is sent with name, team, their last 5 `done` tasks (ID, title, product, tags) and open workload (number of tasks not done or canceled, and the sum of their estimates in hours).
+- **Validation:** handles are limited (schema enum) to the candidates; duplicates are dropped and at most 3 are kept; `score` is rounded and clamped to 0–100. No valid suggestion → `AI_UNAVAILABLE`.
+- **UI:** while waiting, the button reads "Suggesting…". The result is one card with the AI marker and a row per suggestion (avatar, name · team, reason, **Assign**), plus **Dismiss**. Assign saves `assignee` with `assigneeSource: 'ai'`. On failure a short muted message replaces the card. The card is discarded when another task is opened.
+- **Prompt:** a stable system prompt (ranking rules) with prompt caching; the task and the candidates go in the user message.
+
 ---
 
 ## 9. Frontend design
@@ -609,6 +619,7 @@ npm run dev -- --user=dana    # act as another seeded user
 | ⌘K command palette and keyboard shortcuts                                                                | Done 2026-11-19     | §9.4 (v1.9)             |
 | AI: natural-language filtering (shared Claude client, `/api/ai/parse-filter`, filter bar ✨)             | Done 2026-11-19     | §8.0, §8.1 (v1.11)      |
 | AI: effort estimation (`/api/ai/estimate`, ✨ Suggest in the detail panel)                               | Done 2026-11-20     | §8.2 (v1.12)            |
+| AI: suggested assignees (`/api/ai/suggest-assignee`, ✨ Suggest in the detail panel)                     | Done 2026-11-20     | §8.3 (v1.13)            |
 
 ---
 

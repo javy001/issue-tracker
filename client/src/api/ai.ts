@@ -4,6 +4,8 @@ import type {
   EstimateResponse,
   ParseFilterRequest,
   ParseFilterResponse,
+  SuggestAssigneeRequest,
+  SuggestAssigneeResponse,
 } from '@tracker/shared';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from './client.ts';
@@ -23,6 +25,17 @@ export function useEstimateSuggestion() {
   return useMutation({
     mutationFn: (input: EstimateRequest) =>
       apiFetch<EstimateResponse>('/ai/estimate', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+/** §8.3 (v1.13): on demand only, for unassigned tasks. */
+export function useAssigneeSuggestion() {
+  return useMutation({
+    mutationFn: (input: SuggestAssigneeRequest) =>
+      apiFetch<SuggestAssigneeResponse>('/ai/suggest-assignee', {
         method: 'POST',
         body: JSON.stringify(input),
       }),

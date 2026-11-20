@@ -3,7 +3,7 @@
 import type { ActivityDto, TaskDetailDto, UpdateTaskInput } from '@tracker/shared';
 import { Check, Link2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
-import { useEstimateSuggestion } from '@/api/ai.ts';
+import { useAssigneeSuggestion, useEstimateSuggestion } from '@/api/ai.ts';
 import { ApiError } from '@/api/client.ts';
 import { useLookups } from '@/api/reference.ts';
 import { useDeleteTask, useTask, useUpdateTask } from '@/api/tasks.ts';
@@ -27,7 +27,11 @@ import {
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { formatHours, PRIORITY_LABEL, relativeTime, STATUS_LABEL } from '@/lib/labels.ts';
 import { EditableDescription, EditableTitle } from './EditableText.tsx';
-import { AiSuggestButton, EstimateSuggestionCard } from './AiSuggestions.tsx';
+import {
+  AiSuggestButton,
+  AssigneeSuggestionCard,
+  EstimateSuggestionCard,
+} from './AiSuggestions.tsx';
 import {
   AssigneePicker,
   EstimateField,
@@ -71,6 +75,7 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
   const update = useUpdateTask();
   const lookups = useLookups();
   const estimate = useEstimateSuggestion();
+  const assignees = useAssigneeSuggestion();
   const save = (input: UpdateTaskInput) => update.mutate({ id: task.id, input });
 
   const assignee = task.assignee ? lookups.user.get(task.assignee) : undefined;
@@ -103,7 +108,23 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
           <PriorityPicker value={task.priority} onChange={(priority) => save({ priority })} />
         </Property>
         <Property label="Assignee">
-          <AssigneePicker value={task.assignee} onChange={(a) => save({ assignee: a })} />
+          <div className="flex min-w-0 items-center gap-2">
+            <AssigneePicker
+              value={task.assignee}
+              onChange={(a) => {
+                assignees.reset();
+                save({ assignee: a });
+              }}
+            />
+            {task.assignee === null && (
+              <AiSuggestButton
+                label="Suggest assignees"
+                pendingLabel="Suggesting…"
+                pending={assignees.isPending}
+                onClick={() => assignees.mutate({ taskId: task.id })}
+              />
+            )}
+          </div>
         </Property>
         <Property label="Estimate">
           <div className="flex min-w-0 items-center gap-2">
@@ -136,6 +157,12 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
         </Property>
       </dl>
 
+      {task.assignee === null && (
+        <AssigneeSuggestionCard
+          suggestion={assignees}
+          onAssign={(handle) => save({ assignee: handle, assigneeSource: 'ai' })}
+        />
+      )}
       <EstimateSuggestionCard
         suggestion={estimate}
         onAccept={(hours) => save({ estimateHours: hours, estimateSource: 'ai' })}

@@ -312,3 +312,97 @@ describe('POST /api/ai/estimate', () => {
     expect(res.body.error.code).toBe('AI_UNAVAILABLE');
   });
 });
+
+describe('POST /api/ai/suggest-assignee', () => {
+  type Schema = {
+    properties: { suggestions: { items: { properties: { handle: { enum: string[] } } } } };
+  };
+  const offeredHandles = (req: StructuredRequest) =>
+    (req.schema as Schema).properties.suggestions.items.properties.handle.enum;
+
+  async function newTask(app: ReturnType<typeof createApp>, body: Record<string, unknown>) {
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'Speed up the reports API', ...body });
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('ranks candidates from the task product and validates the answer', async () => {
+    const { llm, calls } = fakeLLM(() => {
+      const [a, b] = offeredHandles(calls[0]!);
+      return {
+        suggestions: [
+          { handle: a, score: 91.6, reason: '  Did the last API perf work.  ' },
+          { handle: a, score: 80, reason: 'duplicate' },
+          { handle: b, score: 140, reason: 'Light load.' },
+        ],
+      };
+    });
+    const app = createApp({ db, currentUser: ana, llm });
+    const id = await newTask(app, { product: 'API', tags: ['perf'] });
+
+    const res = await request(app).post('/api/ai/suggest-assignee').send({ taskId: id });
+    expect(res.status).toBe(200);
+    const [a, b] = offeredHandles(calls[0]!);
+    expect(res.body).toEqual({
+      suggestions: [
+        { handle: a, score: 92, reason: 'Did the last API perf work.' },
+        { handle: b, score: 100, reason: 'Light load.' },
+      ],
+    });
+
+    // Candidates: only people who worked on API tasks, sent with history and workload.
+    const { rows } = await pool.query<{ handle: string }>(
+      `select distinct u.handle from tasks t join users u on u.id = t.assignee_id
+       join products p on p.id = t.product_id where p.name = 'API' order by 1`,
+    );
+    expect(offeredHandles(calls[0]!)).toEqual(rows.map((r) => r.handle));
+    const call = calls[0]!;
+    expect(call.feature).toBe('suggest-assignee');
+    expect(call.system).not.toContain('reports API');
+    expect(call.user).toContain('Title: Speed up the reports API');
+    expect(call.user).toMatch(/Open workload: \d+ tasks, [\d.]+h estimated/);
+    expect(call.user).toMatch(/- TSK-\d+: /);
+  });
+
+  it('falls back to all users when the task has no product', async () => {
+    const { llm, calls } = fakeLLM(() => ({
+      suggestions: [{ handle: offeredHandles(calls[0]!)[0], score: 50, reason: 'x' }],
+    }));
+    const app = createApp({ db, currentUser: ana, llm });
+    const id = await newTask(app, {});
+    expect((await request(app).post('/api/ai/suggest-assignee').send({ taskId: id })).status).toBe(
+      200,
+    );
+    const { rows } = await pool.query<{ n: number }>('select count(*)::int as n from users');
+    expect(offeredHandles(calls[0]!)).toHaveLength(rows[0]!.n);
+  });
+
+  it('refuses assigned tasks (409), unknown tasks (404) and bad bodies (400)', async () => {
+    const { llm, calls } = fakeLLM({});
+    const app = createApp({ db, currentUser: ana, llm });
+    const assigned = await newTask(app, { assignee: 'dana' });
+    const res = await request(app).post('/api/ai/suggest-assignee').send({ taskId: assigned });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    expect(
+      (await request(app).post('/api/ai/suggest-assignee').send({ taskId: 'TSK-999999' })).status,
+    ).toBe(404);
+    expect((await request(app).post('/api/ai/suggest-assignee').send({})).status).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['only unknown handles', { suggestions: [{ handle: 'nobody', score: 90, reason: 'x' }] }],
+    ['no suggestions', { suggestions: [] }],
+    ['a malformed response', { people: ['dana'] }],
+  ])('returns 503 AI_UNAVAILABLE for %s', async (_label, answer) => {
+    const { llm } = fakeLLM(answer);
+    const app = createApp({ db, currentUser: ana, llm });
+    const id = await newTask(app, {});
+    const res = await request(app).post('/api/ai/suggest-assignee').send({ taskId: id });
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('AI_UNAVAILABLE');
+  });
+});

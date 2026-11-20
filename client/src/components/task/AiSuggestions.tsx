@@ -1,11 +1,13 @@
-// AI suggestions in the detail panel (§8.2 v1.12): a ✨ Suggest button, then a card
+// AI suggestions in the detail panel (§8.2 v1.12, §8.3 v1.13): a ✨ Suggest button, then a card
 // to accept or dismiss. Nothing is applied until the user clicks.
-import type { EstimateResponse } from '@tracker/shared';
+import type { EstimateResponse, SuggestAssigneeResponse } from '@tracker/shared';
 import { Loader2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { useLookups } from '@/api/reference.ts';
 import { SparkleIcon } from '@/components/icons.tsx';
 import { Button } from '@/components/ui/button.tsx';
+import { UserAvatar } from '@/components/UserAvatar.tsx';
 import { formatHours } from '@/lib/labels.ts';
 
 /** The parts of a React Query mutation a card reads. */
@@ -151,6 +153,54 @@ export function EstimateSuggestionCard({
             </p>
           )}
         </>
+      )}
+    </SuggestionFrame>
+  );
+}
+
+export function AssigneeSuggestionCard({
+  suggestion,
+  onAssign,
+}: {
+  suggestion: Suggestion<SuggestAssigneeResponse>;
+  onAssign: (handle: string) => void;
+}) {
+  const lookups = useLookups();
+  return (
+    <SuggestionFrame suggestion={suggestion} what="assignees" title="Suggested assignees">
+      {(data) => (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {data.suggestions.map((s) => {
+            const user = lookups.user.get(s.handle);
+            const team = user?.team ? lookups.team.get(user.team) : undefined;
+            const name = user?.name ?? s.handle;
+            return (
+              <li key={s.handle} className="flex items-start gap-2">
+                <UserAvatar user={user} size={20} className="mt-0.5" />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="font-medium text-foreground">
+                    {name}
+                    {team && (
+                      <span className="font-normal text-muted-foreground"> · {team.key}</span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">{s.reason}</span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  aria-label={`Assign to ${name}`}
+                  onClick={() => {
+                    onAssign(s.handle);
+                    suggestion.reset();
+                  }}
+                >
+                  Assign
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </SuggestionFrame>
   );
