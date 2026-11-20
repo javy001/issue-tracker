@@ -174,3 +174,25 @@ export interface ParseFilterResponse {
   /** One short sentence describing what Claude understood (§8.1). */
   interpretation: string;
 }
+
+// §8.2 (v1.12): effort estimate for a saved task or an unsaved draft.
+export const estimateRequestSchema = z.union([
+  z.strictObject({ taskId: z.string().trim().min(1) }),
+  z.strictObject({
+    draft: z.strictObject({
+      title,
+      description: description.optional(),
+      tags: tagNames.optional(),
+      product: handleOrNull.optional(),
+    }),
+  }),
+]);
+export type EstimateRequest = z.infer<typeof estimateRequestSchema>;
+
+export interface EstimateResponse {
+  estimateHours: number;
+  /** One or two sentences explaining the estimate. */
+  rationale: string;
+  /** The completed tasks the estimate was based on. */
+  similarTasks: { id: string; title: string; estimateHours: number }[];
+}

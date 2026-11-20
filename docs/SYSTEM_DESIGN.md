@@ -26,6 +26,7 @@
 | 1.9     | 2026-11-19 | Keyboard: J/K move a focus highlight; S/P/A/E/L act on the highlighted row, else the open task; their choices appear in the ⌘K palette. Palette: actions, navigation, task search.                                                                                                                                                               |
 | 1.10    | 2026-11-19 | Search: a bare number, `#n` or `TSK-n` matches that task exactly and is shown first when sorted by relevance.                                                                                                                                                                                                                                    |
 | 1.11    | 2026-11-19 | AI natural-language filter: Enter or ✨ in the search box, result replaces chips/search/sort, flat structured-output schema converted and validated server-side, prompt caching. AI features built one per step: filter, estimate, assignee.                                                                                                     |
+| 1.12    | 2026-11-20 | AI effort estimate: on demand only (✨ Suggest in the detail panel, any task), response returns similar tasks with titles and hours, similar-task ranking and validation defined.                                                                                                                                                                |
 
 As of v1.0 there are no open TBDs. New open questions go in §14 and are marked **TBD** where they appear.
 
@@ -69,7 +70,7 @@ A Linear-style issue tracker built as a full-stack take-home assignment.
 | F9  | Query/filter design                                          | §6         |
 | F10 | AI: natural-language filtering                               | §8.1       |
 | F11 | AI: automated effort estimation                              | §8.2       |
-| F12 | AI: suggested assignees for unassigned tasks                 | §8.3       |
+| F12 |
 
 ### 2.2 Non-functional
 
@@ -334,21 +335,21 @@ REST + JSON under `/api`. Request and response types come from `shared/`.
 
 ### 7.1 Endpoints (draft)
 
-| Method       | Path                                                     | Purpose                                        |
-| ------------ | -------------------------------------------------------- | ---------------------------------------------- |
-| GET          | `/api/me`                                                | Current user                                   |
-| GET          | `/api/users`, `/api/teams`, `/api/products`, `/api/tags` | Reference data                                 |
-| POST         | `/api/tags`                                              | Create tag                                     |
-| GET          | `/api/tasks?filter=<FilterQuery JSON>&cursor=&limit=`    | List / filter / search tasks                   |
-| GET          | `/api/tasks/:id`                                         | Task detail (+ activity)                       |
-| POST         | `/api/tasks`                                             | Create task                                    |
-| PATCH        | `/api/tasks/:id`                                         | Update fields (partial)                        |
-| DELETE       | `/api/tasks/:id`                                         | Delete task                                    |
-| GET/POST     | `/api/views`                                             | List / create saved views                      |
-| PATCH/DELETE | `/api/views/:id`                                         | Update / delete saved view                     |
-| POST         | `/api/ai/parse-filter`                                   | Natural language → `FilterQuery` (§8.1)        |
-| POST         | `/api/ai/estimate`                                       | Suggest an estimate for a task or draft (§8.2) |
-| POST         | `/api/ai/suggest-assignee`                               | Ranked assignee suggestions (§8.3)             |
+| Method       | Path                                                     | Purpose                                               |
+| ------------ | -------------------------------------------------------- | ----------------------------------------------------- |
+| GET          | `/api/me`                                                | Current user                                          |
+| GET          | `/api/users`, `/api/teams`, `/api/products`, `/api/tags` | Reference data                                        |
+| POST         | `/api/tags`                                              | Create tag                                            |
+| GET          | `/api/tasks?filter=<FilterQuery JSON>&cursor=&limit=`    | List / filter / search tasks                          |
+| GET          | `/api/tasks/:id`                                         | Task detail (+ activity)                              |
+| POST         | `/api/tasks`                                             | Create task                                           |
+| PATCH        | `/api/tasks/:id`                                         | Update fields (partial)                               |
+| DELETE       | `/api/tasks/:id`                                         | Delete task                                           |
+| GET/POST     | `/api/views`                                             | List / create saved views                             |
+| PATCH/DELETE | `/api/views/:id`                                         | Update / delete saved view                            |
+| POST         | `/api/ai/parse-filter`                                   | Natural language → `FilterQuery` (§8.1)               |
+| POST         | `/api/ai/estimate`                                       | Suggest an estimate for a task or draft (§8.2, v1.12) |
+| POST         | `/api/ai/suggest-assignee`                               | Ranked assignee suggestions (§8.3)                    |
 
 `:id` accepts the display ID (`TSK-142`).
 
@@ -426,7 +427,16 @@ Input: free text, plus reference data and today's date. Output: `FilterQuery` (�
 
 ### 8.2 Effort estimation
 
-Input: the task's title, description, tags and product, plus a sample of similar completed tasks with their estimates (picked by the same product and tags and a text-search match). Output: `{ estimateHours: number, rationale, similarTaskIds[] }` (validated against the allowed range and step). Accepting it sets `estimate_source = 'ai'`. Triggered on demand (a button) and shown automatically for unestimated tasks in the detail panel.
+Input: the task's title, description, tags and product, plus a sample of similar completed tasks with their estimates (picked by the same product and tags and a text-search match). Output: an estimate in hours, a short rationale and the similar tasks it was based on (validated against the allowed range and step). Accepting it sets `estimate_source = 'ai'`.
+
+**Details (v1.12):**
+
+- **Trigger:** on demand only. A ✨ **Suggest** button next to Estimate in the detail panel, available for every task (estimated or not). Nothing runs automatically when a task is opened. The New task dialog has no button yet.
+- **Endpoint:** `POST /api/ai/estimate` with `{ taskId: "TSK-142" }` or `{ draft: { title, description?, tags?, product? } }` → `{ estimateHours, rationale, similarTasks: { id, title, estimateHours }[] }`.
+- **Similar tasks:** up to 12 tasks with status `done` and an estimate, excluding the task itself, ranked by a text match on title and description (any of the words), +1 for the same product and +0.5 per shared tag.
+- **Validation:** Claude's hours are rounded to the nearest 0.5 h and checked with `estimateHoursSchema` (0.5–80 h); out of range → `AI_UNAVAILABLE`. Similar-task IDs are limited (schema enum) to the tasks that were sent.
+- **UI:** while waiting, the button reads "Estimating…". The result is a suggestion card with the AI marker: "Suggested estimate: 4h", the rationale, "Based on TSK-12 (3h) · TSK-40 (4h)" (links open those tasks), and **Accept** / **Dismiss**. Accept saves `estimateHours` with `estimateSource: 'ai'`. On failure a short muted message replaces the card. The card is discarded when another task is opened.
+- **Prompt:** a stable system prompt (estimation rules, allowed range and step) with prompt caching; the task and its similar tasks go in the user message.
 
 ### 8.3 Suggested assignees
 
@@ -598,6 +608,7 @@ npm run dev -- --user=dana    # act as another seeded user
 | Filter bar (chips, search, sort) and saved views (API + UI)                                              | Done 2026-11-19     | §6.2, §7.1, §9.2 (v1.8) |
 | ⌘K command palette and keyboard shortcuts                                                                | Done 2026-11-19     | §9.4 (v1.9)             |
 | AI: natural-language filtering (shared Claude client, `/api/ai/parse-filter`, filter bar ✨)             | Done 2026-11-19     | §8.0, §8.1 (v1.11)      |
+| AI: effort estimation (`/api/ai/estimate`, ✨ Suggest in the detail panel)                               | Done 2026-11-20     | §8.2 (v1.12)            |
 
 ---
 

@@ -177,3 +177,138 @@ describe('POST /api/ai/parse-filter', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('POST /api/ai/estimate', () => {
+  /** Fake that answers with the first `n` reference tasks it was offered. */
+  function estimatingLLM(hours: number, n = 2) {
+    const calls: StructuredRequest[] = [];
+    const llm: StructuredLLM = {
+      generate: async (req) => {
+        calls.push(req);
+        const items = (
+          req.schema as { properties: { similarTaskIds: { items: { enum?: string[] } } } }
+        ).properties.similarTaskIds.items;
+        return {
+          estimateHours: hours,
+          rationale: '  Like the earlier login fixes.  ',
+          similarTaskIds: (items.enum ?? []).slice(0, n),
+        };
+      },
+    };
+    return { llm, calls };
+  }
+
+  async function createTask(app: ReturnType<typeof createApp>) {
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({
+        title: 'Fix login redirect loop',
+        description: 'Users bounce between /login and /home after the session expires.',
+        product: 'Web App',
+        tags: ['bug'],
+      });
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('estimates a saved task from similar completed tasks', async () => {
+    const { llm, calls } = estimatingLLM(3.2);
+    const app = createApp({ db, currentUser: ana, llm });
+    const id = await createTask(app);
+
+    const res = await request(app).post('/api/ai/estimate').send({ taskId: id });
+    expect(res.status).toBe(200);
+    expect(res.body.estimateHours).toBe(3); // rounded to the 0.5 h step
+    expect(res.body.rationale).toBe('Like the earlier login fixes.');
+    expect(res.body.similarTasks).toHaveLength(2);
+    for (const s of res.body.similarTasks) {
+      expect(s).toEqual({
+        id: expect.stringMatching(/^TSK-\d+$/),
+        title: expect.any(String),
+        estimateHours: expect.any(Number),
+      });
+    }
+
+    const call = calls[0]!;
+    expect(call.feature).toBe('estimate');
+    expect(call.system).not.toContain('Fix login'); // task data stays out of the cached prompt
+    expect(call.user).toContain('Title: Fix login redirect loop');
+    expect(call.user).toContain('Product: Web App');
+    expect(call.user).toContain('Tags: bug');
+    // References: up to 12 done tasks with estimates, never the task itself.
+    const offered = (
+      call.schema as { properties: { similarTaskIds: { items: { enum: string[] } } } }
+    ).properties.similarTaskIds.items.enum;
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.length).toBeLessThanOrEqual(12);
+    expect(offered).not.toContain(id);
+    const ref = await request(app).get(`/api/tasks/${offered[0]}`);
+    expect(ref.body.status).toBe('done');
+    expect(ref.body.estimateHours).not.toBeNull();
+  });
+
+  it('ranks tasks with the same product and tags first', async () => {
+    const { llm, calls } = estimatingLLM(2);
+    const app = createApp({ db, currentUser: ana, llm });
+    await request(app)
+      .post('/api/ai/estimate')
+      .send({ draft: { title: 'zzqx', product: 'Web App', tags: ['bug'] } });
+    const offered = (
+      calls[0]!.schema as { properties: { similarTaskIds: { items: { enum: string[] } } } }
+    ).properties.similarTaskIds.items.enum;
+    const top = await request(app).get(`/api/tasks/${offered[0]}`);
+    expect(top.body.product).toBe('Web App');
+    expect(top.body.tags).toContain('bug');
+  });
+
+  it('accepts a draft and rejects unknown names in it', async () => {
+    const { llm, calls } = estimatingLLM(8, 0);
+    const app = createApp({ db, currentUser: ana, llm });
+    const ok = await request(app)
+      .post('/api/ai/estimate')
+      .send({ draft: { title: 'Add CSV export to reports' } });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({
+      estimateHours: 8,
+      rationale: 'Like the earlier login fixes.',
+      similarTasks: [],
+    });
+
+    const bad = await request(app)
+      .post('/api/ai/estimate')
+      .send({ draft: { title: 'x', tags: ['no-such-tag'] } });
+    expect(bad.status).toBe(400);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('returns 404 for an unknown task and 400 for a bad body', async () => {
+    const { llm, calls } = estimatingLLM(1);
+    const app = createApp({ db, currentUser: ana, llm });
+    expect(
+      (await request(app).post('/api/ai/estimate').send({ taskId: 'TSK-999999' })).status,
+    ).toBe(404);
+    expect((await request(app).post('/api/ai/estimate').send({})).status).toBe(400);
+    expect(
+      (
+        await request(app)
+          .post('/api/ai/estimate')
+          .send({ taskId: 'TSK-1', draft: { title: 'x' } })
+      ).status,
+    ).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['too small after rounding', { estimateHours: 0.2, rationale: 'x', similarTaskIds: [] }],
+    ['too large', { estimateHours: 120, rationale: 'x', similarTaskIds: [] }],
+    ['an unknown reference', { estimateHours: 4, rationale: 'x', similarTaskIds: ['TSK-999999'] }],
+    ['a malformed response', { hours: 4 }],
+  ])('returns 503 AI_UNAVAILABLE for %s', async (_label, answer) => {
+    const { llm } = fakeLLM(answer);
+    const res = await request(createApp({ db, currentUser: ana, llm }))
+      .post('/api/ai/estimate')
+      .send({ draft: { title: 'Something' } });
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('AI_UNAVAILABLE');
+  });
+});

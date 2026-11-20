@@ -3,6 +3,7 @@
 import type { ActivityDto, TaskDetailDto, UpdateTaskInput } from '@tracker/shared';
 import { Check, Link2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
+import { useEstimateSuggestion } from '@/api/ai.ts';
 import { ApiError } from '@/api/client.ts';
 import { useLookups } from '@/api/reference.ts';
 import { useDeleteTask, useTask, useUpdateTask } from '@/api/tasks.ts';
@@ -26,6 +27,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { formatHours, PRIORITY_LABEL, relativeTime, STATUS_LABEL } from '@/lib/labels.ts';
 import { EditableDescription, EditableTitle } from './EditableText.tsx';
+import { AiSuggestButton, EstimateSuggestionCard } from './AiSuggestions.tsx';
 import {
   AssigneePicker,
   EstimateField,
@@ -68,6 +70,7 @@ export function TaskDetailPanel({ id, onClose }: { id: string; onClose: () => vo
 function TaskDetail({ task }: { task: TaskDetailDto }) {
   const update = useUpdateTask();
   const lookups = useLookups();
+  const estimate = useEstimateSuggestion();
   const save = (input: UpdateTaskInput) => update.mutate({ id: task.id, input });
 
   const assignee = task.assignee ? lookups.user.get(task.assignee) : undefined;
@@ -109,6 +112,12 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
               onChange={(h) => save({ estimateHours: h })}
             />
             {task.estimateSource === 'ai' && <AiBadge>AI estimate</AiBadge>}
+            <AiSuggestButton
+              label="Suggest an estimate"
+              pendingLabel="Estimating…"
+              pending={estimate.isPending}
+              onClick={() => estimate.mutate({ taskId: task.id })}
+            />
           </div>
         </Property>
         <Property label="Team">
@@ -126,6 +135,11 @@ function TaskDetail({ task }: { task: TaskDetailDto }) {
           <TagsPicker value={task.tags} onChange={(tags) => save({ tags })} />
         </Property>
       </dl>
+
+      <EstimateSuggestionCard
+        suggestion={estimate}
+        onAccept={(hours) => save({ estimateHours: hours, estimateSource: 'ai' })}
+      />
 
       <section aria-label="Activity" className="flex flex-col gap-2.5 border-t pt-3.5">
         <h3 className="m-0 text-xs font-medium text-muted-foreground">Activity</h3>

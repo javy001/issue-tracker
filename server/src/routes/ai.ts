@@ -1,5 +1,6 @@
-import { parseFilterRequestSchema } from '@tracker/shared';
+import { estimateRequestSchema, parseFilterRequestSchema } from '@tracker/shared';
 import { Router } from 'express';
+import { estimateTask } from '../ai/estimate.ts';
 import { parseFilter } from '../ai/parse-filter.ts';
 import type { StructuredLLM } from '../ai/llm.ts';
 import type { Db } from '../db/client.ts';
@@ -11,6 +12,10 @@ export function aiRouter(db: Db, llm: StructuredLLM) {
   router.post('/parse-filter', async (req, res) => {
     const { text } = parseFilterRequestSchema.parse(req.body);
     res.json(await parseFilter(db, llm, req.user, text));
+  });
+
+  router.post('/estimate', async (req, res) => {
+    res.json(await estimateTask(db, llm, estimateRequestSchema.parse(req.body)));
   });
 
   return router;
